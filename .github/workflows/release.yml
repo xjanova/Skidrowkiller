@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Get version from tag
+      id: version
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "Version: $version"
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build Release
+      run: dotnet build -c Release --no-restore /p:Version=${{ steps.version.outputs.VERSION }}
+
+    - name: Publish x64 Portable
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained true `
+          /p:PublishSingleFile=true `
+          /p:PublishReadyToRun=true `
+          /p:EnableCompressionInSingleFile=true `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          /p:DebugType=none `
+          /p:DebugSymbols=false `
+          /p:Version=${{ steps.version.outputs.VERSION }} `
+          -o publish/win-x64-portable
+
+    - name: Publish x64 Framework
+      run: |
+        dotnet publish -c Release -r win-x64 --self-contained false `
+          /p:PublishReadyToRun=true `
+          /p:DebugType=none `
+          /p:DebugSymbols=false `
+          /p:Version=${{ steps.version.outputs.VERSION }} `
+          -o publish/win-x64-framework
+
+    - name: Publish ARM64 Portable
+      run: |
+        dotnet publish -c Release -r win-arm64 --self-contained true `
+          /p:PublishSingleFile=true `
+          /p:PublishReadyToRun=true `
+          /p:EnableCompressionInSingleFile=true `
+          /p:IncludeNativeLibrariesForSelfExtract=true `
+          /p:DebugType=none `
+          /p:DebugSymbols=false `
+          /p:Version=${{ steps.version.outputs.VERSION }} `
+          -o publish/win-arm64-portable
+
+    - name: Copy configuration files
+      run: |
+        Copy-Item appsettings.json publish/win-x64-portable/ -Force
+        Copy-Item appsettings.Production.json publish/win-x64-portable/ -Force -ErrorAction SilentlyContinue
+        Copy-Item appsettings.json publish/win-x64-framework/ -Force
+        Copy-Item appsettings.Production.json publish/win-x64-framework/ -Force -ErrorAction SilentlyContinue
+        Copy-Item appsettings.json publish/win-arm64-portable/ -Force
+        Copy-Item appsettings.Production.json publish/win-arm64-portable/ -Force -ErrorAction SilentlyContinue
+
+        if (Test-Path signatures.json) {
+          Copy-Item signatures.json publish/win-x64-portable/ -Force
+          Copy-Item signatures.json publish/win-x64-framework/ -Force
+          Copy-Item signatures.json publish/win-arm64-portable/ -Force
+        }
+
+    - name: Create ZIP archives
+      run: |
+        Compress-Archive -Path publish/win-x64-portable/* -DestinationPath "SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-x64-portable.zip"
+        Compress-Archive -Path publish/win-x64-framework/* -DestinationPath "SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-x64-framework.zip"
+        Compress-Archive -Path publish/win-arm64-portable/* -DestinationPath "SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-arm64-portable.zip"
+
+    - name: Generate Release Notes
+      id: release_notes
+      run: |
+        $notes = @"
+        ## Skidrow Killer v${{ steps.version.outputs.VERSION }}
+
+        ### Downloads
+        - **win-x64-portable**: Self-contained executable for Windows x64 (no .NET runtime required)
+        - **win-x64-framework**: Smaller download, requires .NET 8.0 Runtime
+        - **win-arm64-portable**: Self-contained executable for Windows ARM64
+
+        ### Requirements
+        - Windows 10/11
+        - Administrator privileges
+
+        ### What's New
+        - See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details
+
+        ### Checksums
+        ``````
+        "@
+
+        Get-ChildItem *.zip | ForEach-Object {
+          $hash = (Get-FileHash $_.Name -Algorithm SHA256).Hash
+          $notes += "`n$($_.Name): $hash"
+        }
+
+        $notes += "`n``````"
+
+        $notes | Out-File -FilePath release_notes.md -Encoding UTF8
+        echo "Generated release notes"
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Skidrow Killer v${{ steps.version.outputs.VERSION }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ contains(github.ref_name, '-') }}
+        files: |
+          SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-x64-portable.zip
+          SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-x64-framework.zip
+          SkidrowKiller-${{ steps.version.outputs.VERSION }}-win-arm64-portable.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

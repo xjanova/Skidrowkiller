@@ -1,0 +1,186 @@
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+publish/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+*.userprefs
+*.cache
+*.pidb
+*.pdb
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.ipch
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.vspscc
+*.vssscc
+.builds
+*.dotCover
+
+# Visual Studio 2015/2017
+.vs/
+*.VC.db
+*.VC.VC.opendb
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+project.lock.json
+project.fragment.lock.json
+
+# Rider
+.idea/
+*.sln.iml
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# JetBrains Rider
+*.sln.iml
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Mac files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Local settings
+appsettings.local.json
+appsettings.Development.json
+.env
+.env.local
+.env.*.local
+*.local.json
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+TestResult.xml
+*.trx
+
+# NCrunch
+_NCrunch_*
+.*crunch*.local.xml
+nCrunchTemp_*
+
+# Coverage
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage/
+
+# Fakes Assemblies
+FakesAssemblies/
+
+# GhostDoc
+*.GhostDoc.xml
+
+# Node Tools for Visual Studio
+.ntvs_analysis.dat
+node_modules/
+
+# Temp files
+*~
+*.swp
+*.swo
+*.bak
+*.backup
+
+# Logs
+*.log
+*.logs
+
+# Local development
+local/
+.local/
+temp/
+tmp/
+
+# Publish output
+publish/
+dist/
+output/
+
+# Signature database (may contain user customizations)
+# signatures.json - Keep in repo for default patterns
+
+# Windows Installer files
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+# Legacy folder (if not needed in repo)
+# legacy/
+
+# Large binary files
+*.exe
+*.dll
+!**/runtimes/**/*.dll
+
+# Crash dumps
+*.dmp
+
+# Project-specific ignores
+SkidrowKiller.zip
+*.zip
+release_notes.md
+
+# NUL file (Windows)
+nul

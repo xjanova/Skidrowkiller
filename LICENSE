@@ -1,0 +1,42 @@
+MIT License
+
+Copyright (c) 2024-2026 xman studio
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+DISCLAIMER
+
+This software is designed for security and malware detection purposes only.
+The authors are not responsible for:
+
+1. Any damage caused by the use or misuse of this software
+2. False positives that may result in deletion of legitimate files
+3. System instability resulting from process termination
+4. Data loss of any kind
+
+Users are advised to:
+- Backup important data before using this software
+- Review detected threats before enabling auto-delete/kill features
+- Use this software at their own risk
+
+This software is provided as a security tool to help identify and remove
+potentially unwanted or malicious software from Windows systems. It should
+be used responsibly and in accordance with applicable laws and regulations.

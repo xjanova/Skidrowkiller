@@ -1,0 +1,211 @@
+{
+  "Version": "1.0.0",
+  "LastUpdated": "2026-01-08T00:00:00Z",
+  "Signatures": [
+    {
+      "Name": "Skidrow Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["skidrow", "skid-row", "skid_row"],
+      "ProcessNamePatterns": ["skidrow"],
+      "RegistryPatterns": ["skidrow"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "Reloaded Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["reloaded", "rld", "rld!"],
+      "ProcessNamePatterns": ["reloaded"],
+      "RegistryPatterns": ["reloaded"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "Codex Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["codex", "cdx"],
+      "ProcessNamePatterns": ["codex"],
+      "RegistryPatterns": ["codex"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "Plaza Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["plaza"],
+      "ProcessNamePatterns": ["plaza"],
+      "RegistryPatterns": ["plaza"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "CPY Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["cpy", "conspiracy"],
+      "ProcessNamePatterns": ["cpy"],
+      "RegistryPatterns": ["cpy"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "FLT/Fairlight Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["flt", "fairlight"],
+      "ProcessNamePatterns": ["flt"],
+      "RegistryPatterns": ["flt"],
+      "ThreatLevel": 7,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "HOODLUM Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["hoodlum", "hdlm"],
+      "ProcessNamePatterns": ["hoodlum"],
+      "RegistryPatterns": ["hoodlum"],
+      "ThreatLevel": 7,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "3DM Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["3dm", "3dmgame"],
+      "ProcessNamePatterns": ["3dm"],
+      "RegistryPatterns": ["3dm"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group, often bundled with malware"
+    },
+    {
+      "Name": "Ali213 Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["ali213"],
+      "ProcessNamePatterns": ["ali213"],
+      "RegistryPatterns": ["ali213"],
+      "ThreatLevel": 8,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "SteamPunks Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["steampunks", "steam-punks"],
+      "ProcessNamePatterns": ["steampunks"],
+      "RegistryPatterns": ["steampunks"],
+      "ThreatLevel": 7,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "Prophet Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["prophet"],
+      "ProcessNamePatterns": ["prophet"],
+      "RegistryPatterns": ["prophet"],
+      "ThreatLevel": 7,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "Generic Crack Tools",
+      "Category": "Crack/Keygen",
+      "FileNamePatterns": ["crack", "cracked", "keygen", "keymaker", "patch", "patcher", "loader", "activator", "serial"],
+      "ProcessNamePatterns": ["keygen", "crack", "patch"],
+      "RegistryPatterns": ["crack", "keygen"],
+      "ThreatLevel": 6,
+      "Description": "Generic crack/keygen patterns"
+    },
+    {
+      "Name": "Steam API Emulator",
+      "Category": "Game Crack",
+      "FileNamePatterns": ["steam_api.dll", "steam_api64.dll", "steamclient.dll", "steamclient64.dll"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 7,
+      "Description": "Steam API emulator DLLs often used in cracked games"
+    },
+    {
+      "Name": "Steam Emulator",
+      "Category": "Game Crack",
+      "FileNamePatterns": ["steam_emu", "steamemu", "cream_api", "creamapi", "smartsteam", "nosteam", "goldberg"],
+      "ProcessNamePatterns": ["steamemu", "nosteam"],
+      "RegistryPatterns": ["steamemu"],
+      "ThreatLevel": 7,
+      "Description": "Steam emulator/bypass tools"
+    },
+    {
+      "Name": "Generic Trojan Patterns",
+      "Category": "Trojan",
+      "FileNamePatterns": ["trojan", "backdoor", "rootkit", "keylogger", "spyware"],
+      "ProcessNamePatterns": ["trojan", "backdoor"],
+      "RegistryPatterns": ["trojan", "backdoor"],
+      "ThreatLevel": 10,
+      "Description": "Generic trojan/malware patterns"
+    },
+    {
+      "Name": "Cryptominer",
+      "Category": "Cryptominer",
+      "FileNamePatterns": ["xmrig", "cpuminer", "cgminer", "bfgminer", "nicehash", "minergate", "coinhive"],
+      "ProcessNamePatterns": ["xmrig", "miner", "cpuminer"],
+      "RegistryPatterns": ["xmrig", "miner"],
+      "ThreatLevel": 9,
+      "Description": "Cryptocurrency mining software"
+    },
+    {
+      "Name": "Remote Access Tools",
+      "Category": "RAT",
+      "FileNamePatterns": ["njrat", "darkcomet", "poison", "blackshades", "netbus", "subseven"],
+      "ProcessNamePatterns": ["njrat", "darkcomet"],
+      "RegistryPatterns": ["njrat", "darkcomet"],
+      "ThreatLevel": 10,
+      "Description": "Known Remote Access Trojans"
+    },
+    {
+      "Name": "Suspicious DLL Injection",
+      "Category": "DLL Injection",
+      "FileNamePatterns": ["inject", "injector", "hook", "hooker"],
+      "ProcessNamePatterns": ["inject"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 8,
+      "Description": "DLL injection tools"
+    },
+    {
+      "Name": "Password Stealer",
+      "Category": "Stealer",
+      "FileNamePatterns": ["stealer", "grabber", "passwordstealer", "credentialstealer"],
+      "ProcessNamePatterns": ["stealer", "grabber"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "Password/credential stealing malware"
+    },
+    {
+      "Name": "Adware Patterns",
+      "Category": "Adware",
+      "FileNamePatterns": ["adware", "toolbar", "searchbar", "browser_helper"],
+      "ProcessNamePatterns": ["adware"],
+      "RegistryPatterns": ["toolbar"],
+      "ThreatLevel": 5,
+      "Description": "Adware and browser toolbars"
+    }
+  ],
+  "BoosterPatterns": [
+    ".crack",
+    ".cracked",
+    "crack.",
+    "keygen.",
+    "-crack",
+    "-keygen",
+    "_crack",
+    "_keygen",
+    "crack-",
+    "keygen-",
+    "[crack]",
+    "[keygen]",
+    "(crack)",
+    "(keygen)"
+  ],
+  "SafeContextPaths": [
+    "\\Windows\\",
+    "\\Program Files\\Microsoft",
+    "\\Program Files (x86)\\Microsoft",
+    "\\Steam\\steamapps\\common\\",
+    "\\Epic Games\\",
+    "\\GOG Galaxy\\"
+  ],
+  "SuspiciousPorts": [4444, 5555, 6666, 7777, 8888, 9999, 31337, 12345, 65535]
+}

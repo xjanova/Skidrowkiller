@@ -1,0 +1,262 @@
+<Page x:Class="SkidrowKiller.Views.LicenseView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+      mc:Ignorable="d"
+      Title="License">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="License Management"
+                       Style="{StaticResource HeaderTextStyle}"
+                       Margin="0,0,0,8"/>
+            <TextBlock Text="Activate your license to unlock all features"
+                       Style="{StaticResource BodyTextStyle}"/>
+        </StackPanel>
+
+        <!-- License Status Card -->
+        <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Status Icon -->
+                <Grid Grid.Column="0" Width="80" Height="80" Margin="0,0,20,0">
+                    <Ellipse x:Name="StatusGlow" Width="70" Height="70" Opacity="0.3">
+                        <Ellipse.Fill>
+                            <RadialGradientBrush>
+                                <GradientStop Color="#4066bb6a" Offset="0"/>
+                                <GradientStop Color="#00000000" Offset="1"/>
+                            </RadialGradientBrush>
+                        </Ellipse.Fill>
+                    </Ellipse>
+                    <Path x:Name="StatusIcon" Width="40" Height="40" Stretch="Uniform"
+                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Fill="{StaticResource GreenPrimaryBrush}"
+                          Data="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M10,17L6,13L7.41,11.59L10,14.17L16.59,7.58L18,9L10,17Z"/>
+                </Grid>
+
+                <!-- License Info -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="LicenseStatusLabel"
+                               Text="Not Activated"
+                               FontSize="20"
+                               FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="LicenseDetailLabel"
+                               Text="Please enter your license key to activate"
+                               Style="{StaticResource BodyTextStyle}"
+                               Margin="0,4,0,0"
+                               Opacity="0.8"/>
+
+                    <!-- License Info Details -->
+                    <StackPanel x:Name="LicenseInfoPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Email: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                            <TextBlock x:Name="EmailLabel" Text="-" Style="{StaticResource BodyTextStyle}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBlock Text="Expires: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                            <TextBlock x:Name="ExpiresLabel" Text="-" Style="{StaticResource BodyTextStyle}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Devices: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                            <TextBlock x:Name="DevicesLabel" Text="-" Style="{StaticResource BodyTextStyle}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Days Badge -->
+                <Border x:Name="DaysBadge" Grid.Column="2" Background="#2066bb6a" CornerRadius="8" Padding="16,12"
+                        VerticalAlignment="Center" Visibility="Collapsed">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock x:Name="DaysCountLabel" Text="∞" FontSize="28" FontWeight="Bold"
+                                   Foreground="{StaticResource GreenPrimaryBrush}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="days left" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
+        <!-- Main Content -->
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
+                      Style="{StaticResource ModernScrollViewerStyle}"
+                      HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <!-- Activation Form -->
+                <Border x:Name="ActivationPanel" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Enter License Key"
+                                   Style="{StaticResource SubHeaderTextStyle}"
+                                   Margin="0,0,0,12"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox x:Name="LicenseKeyTextBox"
+                                     Grid.Column="0"
+                                     Style="{StaticResource ModernTextBoxStyle}"
+                                     FontSize="14"
+                                     FontFamily="Consolas"
+                                     CharacterCasing="Upper"
+                                     MaxLength="50"
+                                     VerticalContentAlignment="Center"/>
+
+                            <Button x:Name="ActivateButton"
+                                    Grid.Column="1"
+                                    Content="Activate"
+                                    Style="{StaticResource SuccessButtonStyle}"
+                                    Margin="12,0,0,0"
+                                    Padding="24,12"
+                                    Click="ActivateButton_Click"/>
+                        </Grid>
+
+                        <TextBlock x:Name="ActivationMessage"
+                                   Text=""
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Margin="0,12,0,0"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Purchase Link -->
+                        <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                            <TextBlock Text="Don't have a license? "
+                                       Style="{StaticResource BodyTextStyle}"
+                                       Opacity="0.7"/>
+                            <TextBlock Text="Purchase here"
+                                       Foreground="{StaticResource CyanPrimaryBrush}"
+                                       Cursor="Hand"
+                                       TextDecorations="Underline"
+                                       MouseLeftButtonUp="PurchaseLink_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Licensed Panel (shown when activated) -->
+                <Border x:Name="LicensedPanel" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="License Actions"
+                                   Style="{StaticResource SubHeaderTextStyle}"
+                                   Margin="0,0,0,12"/>
+
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="ValidateButton"
+                                    Content="Validate License"
+                                    Style="{StaticResource NavButtonStyle}"
+                                    Padding="16,10"
+                                    Margin="0,0,12,0"
+                                    Click="ValidateButton_Click"/>
+
+                            <Button x:Name="DeactivateButton"
+                                    Content="Deactivate"
+                                    Style="{StaticResource DangerButtonStyle}"
+                                    Padding="16,10"
+                                    Click="DeactivateButton_Click"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="LicensedMessage"
+                                   Text=""
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Margin="0,12,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Trial/Demo Section -->
+                <Border Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
+                    <StackPanel>
+                        <TextBlock Text="Trial Version"
+                                   Style="{StaticResource SubHeaderTextStyle}"
+                                   Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Try Skidrow Killer free for 7 days with limited features."
+                                   Style="{StaticResource BodyTextStyle}"
+                                   Opacity="0.8"
+                                   Margin="0,0,0,12"/>
+
+                        <Button x:Name="StartTrialButton"
+                                Content="Start 7-Day Trial"
+                                Style="{StaticResource NavButtonStyle}"
+                                Padding="20,12"
+                                HorizontalAlignment="Left"
+                                Click="StartTrialButton_Click"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Features Comparison -->
+                <Border Style="{StaticResource GlassCardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="Features Comparison"
+                                   Style="{StaticResource SubHeaderTextStyle}"
+                                   Margin="0,0,0,16"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="100"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Header -->
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Feature" FontWeight="SemiBold" Margin="0,0,0,12"/>
+                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Trial" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Pro" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,0,0,12"/>
+
+                            <!-- Basic Scan -->
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Basic Malware Scan" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="1" Grid.Column="1" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="1" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+
+                            <!-- Real-time Protection -->
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Real-time Protection" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="2" Grid.Column="1" Text="Limited" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="2" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+
+                            <!-- Auto Quarantine -->
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Auto Quarantine" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="3" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="3" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+
+                            <!-- Registry Monitoring -->
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Registry Monitoring" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="4" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="4" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+
+                            <!-- Auto Updates -->
+                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Automatic Updates" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="5" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="5" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+
+                            <!-- Priority Support -->
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Priority Support" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
+                            <TextBlock Grid.Row="6" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
+                            <TextBlock Grid.Row="6" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>
