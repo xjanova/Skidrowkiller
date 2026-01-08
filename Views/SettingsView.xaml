@@ -67,11 +67,11 @@
     </Page.Resources>
 
     <ScrollViewer x:Name="MainScrollViewer"
-                  VerticalScrollBarVisibility="Visible"
+                  VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled"
-                  Background="Transparent"
-                  CanContentScroll="False"
-                  PreviewMouseWheel="ScrollViewer_PreviewMouseWheel">
+                  Background="#01000000"
+                  Focusable="False"
+                  CanContentScroll="False">
         <StackPanel MaxWidth="800" Margin="24" Background="Transparent">
             <!-- Header -->
             <TextBlock Text="Settings" Style="{StaticResource HeaderTextStyle}" FontSize="28" Margin="0,0,0,8"/>
@@ -470,6 +470,112 @@
                         <Button Content="Open Folder" Style="{StaticResource SecondaryButtonStyle}"
                                 Click="OpenLogFolder_Click" VerticalAlignment="Center" Padding="12,6"/>
                     </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Database & Updates Section -->
+            <TextBlock Text="DATABASE &amp; UPDATES" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,12,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <!-- Virus Database Info -->
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Database Icon -->
+                        <Border Grid.Column="0" Width="48" Height="48" CornerRadius="8"
+                                Background="{StaticResource AccentGradientBrush}" Margin="0,0,16,0">
+                            <Path Width="24" Height="24" Stretch="Uniform" Fill="White"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Data="M12,3C7.58,3 4,4.79 4,7V17C4,19.21 7.59,21 12,21C16.41,21 20,19.21 20,17V7C20,4.79 16.42,3 12,3M18,17C18,17.5 15.87,19 12,19C8.13,19 6,17.5 6,17V14.77C7.61,15.55 9.72,16 12,16C14.28,16 16.39,15.55 18,14.77V17M18,12.45C16.7,13.4 14.42,14 12,14C9.58,14 7.3,13.4 6,12.45V9.64C7.47,10.47 9.61,11 12,11C14.39,11 16.53,10.47 18,9.64V12.45M12,9C8.13,9 6,7.5 6,7C6,6.5 8.13,5 12,5C15.87,5 18,6.5 18,7C18,7.5 15.87,9 12,9Z"/>
+                        </Border>
+
+                        <!-- Database Info -->
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="Virus Definition Database" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Version: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                                <TextBlock x:Name="TxtDbVersion" Text="2026.01.08.001" Style="{StaticResource BodyTextStyle}"
+                                           Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="SemiBold"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <TextBlock Text="Last Updated: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                                <TextBlock x:Name="TxtDbLastUpdate" Text="Today at 12:00" Style="{StaticResource BodyTextStyle}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <TextBlock Text="Signatures: " Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                                <TextBlock x:Name="TxtDbSignatures" Text="125,847" Style="{StaticResource BodyTextStyle}"
+                                           Foreground="{StaticResource GreenPrimaryBrush}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Update Button -->
+                        <Button x:Name="BtnUpdateDatabase" Grid.Column="2" Style="{StaticResource SuccessButtonStyle}"
+                                Click="UpdateDatabase_Click" Padding="16,10" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="16" Height="16" Stretch="Uniform" Fill="White" Margin="0,0,8,0"
+                                      Data="M17.65,6.35C16.2,4.9 14.21,4 12,4C7.58,4 4.01,7.58 4.01,12C4.01,16.42 7.58,20 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18C8.69,18 6,15.31 6,12C6,8.69 8.69,6 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
+                                <TextBlock Text="Update Now"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,0,0,16"/>
+
+                    <!-- Auto Update Settings -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Auto-update database" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically download latest virus definitions"
+                                       Style="{StaticResource BodyTextStyle}" Foreground="{StaticResource TextTertiaryBrush}"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkAutoUpdateDb" Style="{StaticResource ToggleSwitchStyle}"
+                                  IsChecked="True" VerticalAlignment="Center" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <!-- Update Frequency -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="150"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Update frequency" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="How often to check for database updates"
+                                       Style="{StaticResource BodyTextStyle}" Foreground="{StaticResource TextTertiaryBrush}"/>
+                        </StackPanel>
+                        <ComboBox x:Name="CmbUpdateFrequency" Style="{StaticResource ModernComboBoxStyle}"
+                                  VerticalAlignment="Center" SelectionChanged="Setting_SelectionChanged">
+                            <ComboBoxItem Content="Every hour"/>
+                            <ComboBoxItem Content="Every 6 hours" IsSelected="True"/>
+                            <ComboBoxItem Content="Every 12 hours"/>
+                            <ComboBoxItem Content="Daily"/>
+                        </ComboBox>
+                    </Grid>
+
+                    <!-- Database Status -->
+                    <Border Background="#1029b6f6" CornerRadius="8" Padding="12" Margin="0,8,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Path x:Name="DbStatusIcon" Width="20" Height="20" Stretch="Uniform" Margin="0,0,12,0"
+                                  Fill="{StaticResource GreenPrimaryBrush}"
+                                  Data="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z"/>
+                            <TextBlock x:Name="TxtDbStatus" Grid.Column="1" Text="Database is up to date"
+                                       Style="{StaticResource BodyTextStyle}" VerticalAlignment="Center"
+                                       Foreground="{StaticResource GreenPrimaryBrush}"/>
+                        </Grid>
+                    </Border>
                 </StackPanel>
             </Border>
 

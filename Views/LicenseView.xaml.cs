@@ -294,5 +294,6 @@ namespace SkidrowKiller.Views
         {
             UpdateUI();
         }
+
     }
 }

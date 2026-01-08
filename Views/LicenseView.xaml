@@ -91,10 +91,13 @@
         </Border>
 
         <!-- Main Content -->
-        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto"
-                      Style="{StaticResource ModernScrollViewerStyle}"
-                      HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
+        <ScrollViewer x:Name="MainScrollViewer" Grid.Row="2"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Background="#01000000"
+                      Focusable="False"
+                      CanContentScroll="False">
+            <StackPanel Background="Transparent">
                 <!-- Activation Form -->
                 <Border x:Name="ActivationPanel" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
                     <StackPanel>

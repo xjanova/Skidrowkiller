@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using Microsoft.Win32;
 using SkidrowKiller.Services;
 using Serilog;
@@ -14,6 +15,7 @@ namespace SkidrowKiller.Views
     {
         private readonly ILogger _logger;
         private readonly string _settingsPath;
+        private readonly DatabaseService _databaseService;
         private UserSettings _settings;
         private bool _isLoading = true;
         private bool _hasChanges;
@@ -28,10 +30,15 @@ namespace SkidrowKiller.Views
                 "user_settings.json"
             );
 
+            _databaseService = new DatabaseService();
+            _databaseService.UpdateProgress += DatabaseService_UpdateProgress;
+            _databaseService.DatabaseUpdated += DatabaseService_Updated;
+
             _settings = LoadSettings();
             ApplySettingsToUI();
             UpdatePaths();
             UpdateVersionInfo();
+            UpdateDatabaseInfo();
 
             _isLoading = false;
         }
@@ -110,6 +117,10 @@ namespace SkidrowKiller.Views
             // Logging
             ChkEnableLogging.IsChecked = _settings.EnableLogging;
             CmbLogLevel.SelectedIndex = _settings.LogLevelIndex;
+
+            // Database & Updates
+            ChkAutoUpdateDb.IsChecked = _settings.AutoUpdateDatabase;
+            CmbUpdateFrequency.SelectedIndex = _settings.UpdateFrequencyIndex;
         }
 
         private void ApplyUIToSettings()
@@ -144,6 +155,10 @@ namespace SkidrowKiller.Views
             // Logging
             _settings.EnableLogging = ChkEnableLogging.IsChecked ?? true;
             _settings.LogLevelIndex = CmbLogLevel.SelectedIndex;
+
+            // Database & Updates
+            _settings.AutoUpdateDatabase = ChkAutoUpdateDb.IsChecked ?? true;
+            _settings.UpdateFrequencyIndex = CmbUpdateFrequency.SelectedIndex;
         }
 
         private void UpdatePaths()
@@ -332,6 +347,103 @@ namespace SkidrowKiller.Views
                     MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+
+        private void UpdateDatabaseInfo()
+        {
+            var info = _databaseService.CurrentInfo;
+            TxtDbVersion.Text = info.Version;
+            TxtDbLastUpdate.Text = _databaseService.GetFormattedLastUpdate();
+            TxtDbSignatures.Text = _databaseService.GetFormattedSignatureCount();
+
+            UpdateDatabaseStatus(info.Status);
+        }
+
+        private void UpdateDatabaseStatus(DatabaseStatus status)
+        {
+            switch (status)
+            {
+                case DatabaseStatus.UpToDate:
+                    TxtDbStatus.Text = "Database is up to date";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z");
+                    break;
+                case DatabaseStatus.UpdateAvailable:
+                    TxtDbStatus.Text = "Update available";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("WarningBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z");
+                    break;
+                case DatabaseStatus.Updating:
+                    TxtDbStatus.Text = "Updating database...";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("CyanPrimaryBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("CyanPrimaryBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z");
+                    break;
+                case DatabaseStatus.Error:
+                    TxtDbStatus.Text = "Error checking for updates";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("DangerBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("DangerBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M12,2C6.47,2 2,6.47 2,12C2,17.53 6.47,22 12,22C17.53,22 22,17.53 22,12C22,6.47 17.53,2 12,2M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M16.59,7.58L10,14.17L7.41,11.59L6,13L10,17L18,9L16.59,7.58Z");
+                    break;
+                case DatabaseStatus.Offline:
+                    TxtDbStatus.Text = "Offline - using cached database";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("TextTertiaryBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("TextTertiaryBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z");
+                    break;
+            }
+        }
+
+        private async void UpdateDatabase_Click(object sender, RoutedEventArgs e)
+        {
+            BtnUpdateDatabase.IsEnabled = false;
+
+            try
+            {
+                UpdateDatabaseStatus(DatabaseStatus.Updating);
+
+                var result = await _databaseService.SimulateUpdateAsync();
+
+                if (result.Success)
+                {
+                    UpdateDatabaseInfo();
+                    TxtDbStatus.Text = result.Message ?? "Database updated successfully";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                }
+                else
+                {
+                    UpdateDatabaseStatus(DatabaseStatus.Error);
+                    TxtDbStatus.Text = result.Message ?? "Update failed";
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Database update failed");
+                UpdateDatabaseStatus(DatabaseStatus.Error);
+                TxtDbStatus.Text = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                BtnUpdateDatabase.IsEnabled = true;
+            }
+        }
+
+        private void DatabaseService_UpdateProgress(object? sender, DatabaseUpdateEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                TxtDbStatus.Text = $"{e.Stage} ({e.Progress}%)";
+            });
+        }
+
+        private void DatabaseService_Updated(object? sender, DatabaseInfo info)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateDatabaseInfo();
+            });
+        }
     }
 
     /// <summary>
@@ -370,6 +482,10 @@ namespace SkidrowKiller.Views
         public bool EnableLogging { get; set; } = true;
         public int LogLevelIndex { get; set; } = 2; // Normal
 
+        // Database & Updates
+        public bool AutoUpdateDatabase { get; set; } = true;
+        public int UpdateFrequencyIndex { get; set; } = 1; // 0 = Every hour, 1 = Every 6 hours, 2 = Every 12 hours, 3 = Daily
+
         // Helper methods
         public int GetBackupRetentionDays()
         {
@@ -406,6 +522,18 @@ namespace SkidrowKiller.Views
                 2 => 40,
                 3 => 60,
                 _ => 20
+            };
+        }
+
+        public int GetUpdateFrequencyHours()
+        {
+            return UpdateFrequencyIndex switch
+            {
+                0 => 1,
+                1 => 6,
+                2 => 12,
+                3 => 24,
+                _ => 6
             };
         }
     }
