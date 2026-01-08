@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -19,6 +20,8 @@ namespace SkidrowKiller
         private readonly ProtectionService _protection;
         private readonly QuarantineService _quarantine;
         private readonly LicenseService _licenseService;
+        private readonly NetworkProtectionService _networkProtection;
+        private readonly SelfProtectionService _selfProtection;
         private readonly ILogger _logger;
 
         private Button? _activeNavButton;
@@ -30,6 +33,7 @@ namespace SkidrowKiller
         private QuarantineView? _quarantineView;
         private SettingsView? _settingsView;
         private LicenseView? _licenseView;
+        private NetworkProtectionView? _networkProtectionView;
         private bool _disposed;
 
         public MainWindow()
@@ -49,11 +53,14 @@ namespace SkidrowKiller
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
                 _quarantine = new QuarantineService();
                 _licenseService = new LicenseService();
+                _networkProtection = new NetworkProtectionService(_analyzer);
+                _selfProtection = new SelfProtectionService();
 
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
                 _protection.StatusChanged += Protection_StatusChanged;
                 _licenseService.LicenseStatusChanged += LicenseService_StatusChanged;
+                _selfProtection.TamperAttemptDetected += SelfProtection_TamperAttemptDetected;
 
                 // Initialize views
                 _scanView = new ScanView(_scanner, _whitelistManager, _backupManager);
@@ -64,6 +71,7 @@ namespace SkidrowKiller
                 _quarantineView = new QuarantineView(_quarantine);
                 _settingsView = new SettingsView();
                 _licenseView = new LicenseView(_licenseService);
+                _networkProtectionView = new NetworkProtectionView(_networkProtection, _analyzer);
 
                 // Update license badge
                 UpdateLicenseBadge();
@@ -79,6 +87,9 @@ namespace SkidrowKiller
                     _monitorView?.RefreshUI();
                     _logger.Information("Real-time protection started");
                 }
+
+                // Initialize and enable self-protection
+                _ = InitializeSelfProtectionAsync();
 
                 // Update title with version
                 Title = $"Skidrow Killer v{UpdateService.GetCurrentVersion()}";
@@ -148,6 +159,10 @@ namespace SkidrowKiller
                 case "Monitor":
                     MainFrame.Navigate(_monitorView);
                     break;
+                case "Network":
+                    MainFrame.Navigate(_networkProtectionView);
+                    _networkProtectionView?.RefreshUI();
+                    break;
                 case "Threats":
                     MainFrame.Navigate(_threatsView);
                     _threatsView?.RefreshThreats();
@@ -177,6 +192,38 @@ namespace SkidrowKiller
         private void LicenseService_StatusChanged(object? sender, LicenseStatus status)
         {
             Dispatcher.Invoke(() => UpdateLicenseBadge());
+        }
+
+        private async Task InitializeSelfProtectionAsync()
+        {
+            try
+            {
+                _logger.Information("Initializing self-protection system...");
+                await _selfProtection.InitializeAsync();
+                _selfProtection.EnableProtection();
+                _logger.Information("Self-protection enabled - Skidrow Killer is protected from malware attacks");
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Self-protection initialization warning");
+            }
+        }
+
+        private void SelfProtection_TamperAttemptDetected(object? sender, TamperAttempt attempt)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                _logger.Warning("TAMPER ATTEMPT BLOCKED: {Type} - {Description}", attempt.Type, attempt.Description);
+
+                // Show critical status when tamper detected
+                StatusIndicator.Fill = (Brush)FindResource("DangerBrush");
+                StatusText.Text = "Tamper Blocked!";
+                StatusText.Foreground = (Brush)FindResource("DangerBrush");
+
+                // Show notification badge
+                ThreatCountBadge.Visibility = Visibility.Visible;
+                ThreatCountText.Text = "!";
+            });
         }
 
         private void UpdateLicenseBadge()
@@ -278,6 +325,16 @@ namespace SkidrowKiller
                 {
                     _protection.StatusChanged -= Protection_StatusChanged;
                     _protection.Dispose();
+                }
+
+                // Dispose network protection
+                _networkProtection?.Dispose();
+
+                // Dispose self-protection
+                if (_selfProtection != null)
+                {
+                    _selfProtection.TamperAttemptDetected -= SelfProtection_TamperAttemptDetected;
+                    _selfProtection.Dispose();
                 }
 
                 // Dispose scanner if it implements IDisposable
