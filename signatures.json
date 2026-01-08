@@ -1,132 +1,489 @@
 {
-  "Version": "1.0.0",
+  "Version": "2.0.0",
   "LastUpdated": "2026-01-08T00:00:00Z",
+  "DatabaseInfo": {
+    "TotalSignatures": 85,
+    "TotalCategories": 15,
+    "Description": "Professional malware signature database for Skidrow Killer"
+  },
   "Signatures": [
     {
-      "Name": "Skidrow Crack Group",
+      "Name": "SKIDROW Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["skidrow", "skid-row", "skid_row"],
+      "FileNamePatterns": ["skidrow", "skid-row", "skid_row", "skidrow.exe", "skidrow.dll"],
       "ProcessNamePatterns": ["skidrow"],
       "RegistryPatterns": ["skidrow"],
+      "DirectoryPatterns": ["\\skidrow\\", "\\skid-row\\"],
       "ThreatLevel": 8,
-      "Description": "Known warez/crack group signature"
+      "Description": "Known warez/crack group signature - likely contains cracked software"
     },
     {
-      "Name": "Reloaded Crack Group",
+      "Name": "RELOADED Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["reloaded", "rld", "rld!"],
+      "FileNamePatterns": ["reloaded", "rld", "rld!", "rld.dll", "reloaded.ini"],
       "ProcessNamePatterns": ["reloaded"],
       "RegistryPatterns": ["reloaded"],
+      "DirectoryPatterns": ["\\reloaded\\", "\\rld\\"],
       "ThreatLevel": 8,
       "Description": "Known warez/crack group signature"
     },
     {
-      "Name": "Codex Crack Group",
+      "Name": "CODEX Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["codex", "cdx"],
+      "FileNamePatterns": ["codex", "cdx", "codex.exe", "codex.dll", "cdx-"],
       "ProcessNamePatterns": ["codex"],
       "RegistryPatterns": ["codex"],
+      "DirectoryPatterns": ["\\codex\\", "\\CODEX\\"],
       "ThreatLevel": 8,
       "Description": "Known warez/crack group signature"
     },
     {
-      "Name": "Plaza Crack Group",
+      "Name": "PLAZA Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["plaza"],
+      "FileNamePatterns": ["plaza", "plz-", "plaza.exe"],
       "ProcessNamePatterns": ["plaza"],
       "RegistryPatterns": ["plaza"],
+      "DirectoryPatterns": ["\\plaza\\"],
       "ThreatLevel": 8,
       "Description": "Known warez/crack group signature"
     },
     {
-      "Name": "CPY Crack Group",
+      "Name": "CPY/CONSPIRACY Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["cpy", "conspiracy"],
+      "FileNamePatterns": ["cpy", "conspiracy", "cpy.exe", "cpy.ini"],
       "ProcessNamePatterns": ["cpy"],
       "RegistryPatterns": ["cpy"],
+      "DirectoryPatterns": ["\\cpy\\", "\\conspiracy\\"],
       "ThreatLevel": 8,
       "Description": "Known warez/crack group signature"
     },
     {
       "Name": "FLT/Fairlight Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["flt", "fairlight"],
+      "FileNamePatterns": ["flt", "fairlight", "flt.exe", "flt-"],
       "ProcessNamePatterns": ["flt"],
       "RegistryPatterns": ["flt"],
+      "DirectoryPatterns": ["\\flt\\", "\\fairlight\\"],
       "ThreatLevel": 7,
       "Description": "Known warez/crack group signature"
     },
     {
       "Name": "HOODLUM Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["hoodlum", "hdlm"],
+      "FileNamePatterns": ["hoodlum", "hdlm", "hoodlum.exe"],
       "ProcessNamePatterns": ["hoodlum"],
       "RegistryPatterns": ["hoodlum"],
+      "DirectoryPatterns": ["\\hoodlum\\"],
       "ThreatLevel": 7,
       "Description": "Known warez/crack group signature"
     },
     {
-      "Name": "3DM Crack Group",
+      "Name": "RAZOR1911 Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["3dm", "3dmgame"],
-      "ProcessNamePatterns": ["3dm"],
-      "RegistryPatterns": ["3dm"],
-      "ThreatLevel": 8,
-      "Description": "Known warez/crack group, often bundled with malware"
-    },
-    {
-      "Name": "Ali213 Crack Group",
-      "Category": "Crack/Warez",
-      "FileNamePatterns": ["ali213"],
-      "ProcessNamePatterns": ["ali213"],
-      "RegistryPatterns": ["ali213"],
+      "FileNamePatterns": ["razor1911", "razor", "rzr-", "razor.exe"],
+      "ProcessNamePatterns": ["razor1911"],
+      "RegistryPatterns": ["razor1911"],
+      "DirectoryPatterns": ["\\razor1911\\", "\\razor\\"],
       "ThreatLevel": 8,
       "Description": "Known warez/crack group signature"
     },
     {
-      "Name": "SteamPunks Crack Group",
+      "Name": "EMPRESS Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["steampunks", "steam-punks"],
-      "ProcessNamePatterns": ["steampunks"],
-      "RegistryPatterns": ["steampunks"],
-      "ThreatLevel": 7,
-      "Description": "Known warez/crack group signature"
+      "FileNamePatterns": ["empress", "empress.exe", "empress-"],
+      "ProcessNamePatterns": ["empress"],
+      "RegistryPatterns": ["empress"],
+      "DirectoryPatterns": ["\\empress\\", "\\EMPRESS\\"],
+      "ThreatLevel": 8,
+      "Description": "EMPRESS crack release"
     },
     {
       "Name": "Prophet Crack Group",
       "Category": "Crack/Warez",
-      "FileNamePatterns": ["prophet"],
+      "FileNamePatterns": ["prophet", "prp-"],
       "ProcessNamePatterns": ["prophet"],
       "RegistryPatterns": ["prophet"],
+      "DirectoryPatterns": ["\\prophet\\"],
       "ThreatLevel": 7,
       "Description": "Known warez/crack group signature"
     },
     {
+      "Name": "3DM Chinese Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["3dm", "3dmgame", "3dm.exe", "3dm.dll"],
+      "ProcessNamePatterns": ["3dm", "3dmgame"],
+      "RegistryPatterns": ["3dm"],
+      "DirectoryPatterns": ["\\3dm\\", "\\3dmgame\\"],
+      "ThreatLevel": 9,
+      "Description": "Chinese warez/crack group - HIGH RISK of bundled malware"
+    },
+    {
+      "Name": "ALI213 Chinese Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["ali213", "ali213.exe", "ali213.dll"],
+      "ProcessNamePatterns": ["ali213"],
+      "RegistryPatterns": ["ali213"],
+      "DirectoryPatterns": ["\\ali213\\"],
+      "ThreatLevel": 9,
+      "Description": "Chinese warez/crack group - HIGH RISK of bundled malware"
+    },
+    {
+      "Name": "STEAMPUNKS Crack Group",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["steampunks", "steam-punks", "stp-"],
+      "ProcessNamePatterns": ["steampunks"],
+      "RegistryPatterns": ["steampunks"],
+      "DirectoryPatterns": ["\\steampunks\\"],
+      "ThreatLevel": 7,
+      "Description": "Known warez/crack group signature"
+    },
+    {
+      "Name": "FitGirl Repack",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["fitgirl", "fg-", "fitgirl-repacks"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "DirectoryPatterns": ["\\fitgirl\\", "\\FitGirl\\"],
+      "ThreatLevel": 7,
+      "Description": "FitGirl repack signature"
+    },
+    {
+      "Name": "DODI Repack",
+      "Category": "Crack/Warez",
+      "FileNamePatterns": ["dodi", "dodi-repacks"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "DirectoryPatterns": ["\\dodi\\", "\\DODI\\"],
+      "ThreatLevel": 7,
+      "Description": "DODI repack signature"
+    },
+    {
       "Name": "Generic Crack Tools",
       "Category": "Crack/Keygen",
-      "FileNamePatterns": ["crack", "cracked", "keygen", "keymaker", "patch", "patcher", "loader", "activator", "serial"],
-      "ProcessNamePatterns": ["keygen", "crack", "patch"],
+      "FileNamePatterns": ["crack", "cracked", "keygen", "keymaker", "patch", "patcher", "loader", "activator", "serial", "warez"],
+      "ProcessNamePatterns": ["keygen", "crack", "patch", "activator"],
       "RegistryPatterns": ["crack", "keygen"],
       "ThreatLevel": 6,
       "Description": "Generic crack/keygen patterns"
     },
     {
-      "Name": "Steam API Emulator",
+      "Name": "KMSpico/KMS Activator",
+      "Category": "Activation Tool",
+      "FileNamePatterns": ["kmspico", "kmsauto", "kms_vl_all", "hwidgen", "hwid.kms", "mas_aio", "kms-r@in", "kmsactivator"],
+      "ProcessNamePatterns": ["kmspico", "kmsauto"],
+      "RegistryPatterns": ["KMSpico", "KMSAuto", "KMSELDI"],
+      "ThreatLevel": 9,
+      "Description": "Windows/Office KMS activation tool - HIGH RISK of bundled malware"
+    },
+    {
+      "Name": "Goldberg Steam Emulator",
       "Category": "Game Crack",
-      "FileNamePatterns": ["steam_api.dll", "steam_api64.dll", "steamclient.dll", "steamclient64.dll"],
+      "FileNamePatterns": ["goldberg_steam_api.dll", "goldberg", "steam_settings", "local_save.txt"],
       "ProcessNamePatterns": [],
       "RegistryPatterns": [],
       "ThreatLevel": 7,
-      "Description": "Steam API emulator DLLs often used in cracked games"
+      "Description": "Goldberg Steam Emulator - bypasses Steam DRM"
     },
     {
-      "Name": "Steam Emulator",
+      "Name": "CreamAPI DLC Unlocker",
       "Category": "Game Crack",
-      "FileNamePatterns": ["steam_emu", "steamemu", "cream_api", "creamapi", "smartsteam", "nosteam", "goldberg"],
-      "ProcessNamePatterns": ["steamemu", "nosteam"],
-      "RegistryPatterns": ["steamemu"],
+      "FileNamePatterns": ["cream_api.dll", "cream_api64.dll", "creamapi", "cream.ini", "cream_api.ini"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 8,
+      "Description": "CreamAPI DLC Unlocker - unlocks paid DLC content"
+    },
+    {
+      "Name": "SmartSteamEmu",
+      "Category": "Game Crack",
+      "FileNamePatterns": ["smartsteamemu", "sse.dll", "sse.exe", "smartsteam", "SmartSteamEmu.dll", "SmartSteamEmu.ini"],
+      "ProcessNamePatterns": ["smartsteamemu"],
+      "RegistryPatterns": ["SmartSteamEmu"],
+      "DirectoryPatterns": ["\\sse\\", "\\smartsteamemu\\"],
       "ThreatLevel": 7,
-      "Description": "Steam emulator/bypass tools"
+      "Description": "SmartSteamEmu - Steam emulator for offline play"
+    },
+    {
+      "Name": "Steam API Emulator (Generic)",
+      "Category": "Game Crack",
+      "FileNamePatterns": ["steam_emu.dll", "steamemu.dll", "steam_api.dll.bak", "steam_api64.dll.bak"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 6,
+      "Description": "Modified/fake Steam API DLL - may bypass Steam DRM"
+    },
+    {
+      "Name": "Origin Emulator",
+      "Category": "Game Crack",
+      "FileNamePatterns": ["origin_emu", "origin_crack", "origin_bypass"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 7,
+      "Description": "Origin DRM bypass"
+    },
+    {
+      "Name": "NjRAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["njrat", "njw0rm", "bladabindi"],
+      "ProcessNamePatterns": ["njrat", "bladabindi"],
+      "RegistryPatterns": ["njrat"],
+      "ThreatLevel": 10,
+      "Description": "NjRAT Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "DarkComet RAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["darkcomet", "fynloski", "dc.exe"],
+      "ProcessNamePatterns": ["darkcomet", "fynloski"],
+      "RegistryPatterns": ["darkcomet", "DCRAT"],
+      "ThreatLevel": 10,
+      "Description": "DarkComet Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "AsyncRAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["asyncrat", "async-rat", "async_rat"],
+      "ProcessNamePatterns": ["asyncrat"],
+      "RegistryPatterns": ["AsyncRAT"],
+      "ThreatLevel": 10,
+      "Description": "AsyncRAT Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "QuasarRAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["quasarrat", "quasar", "xrat"],
+      "ProcessNamePatterns": ["quasar"],
+      "RegistryPatterns": ["QuasarRAT", "xRAT"],
+      "ThreatLevel": 10,
+      "Description": "QuasarRAT Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "OrcusRAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["orcus", "orcusrat"],
+      "ProcessNamePatterns": ["orcus"],
+      "RegistryPatterns": ["OrcusRAT"],
+      "ThreatLevel": 10,
+      "Description": "OrcusRAT Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "NanoCore RAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["nanocore", "nano.exe"],
+      "ProcessNamePatterns": ["nanocore"],
+      "RegistryPatterns": ["NanoCore"],
+      "ThreatLevel": 10,
+      "Description": "NanoCore Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "Remcos RAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["remcos", "remcos.exe"],
+      "ProcessNamePatterns": ["remcos"],
+      "RegistryPatterns": ["Remcos"],
+      "ThreatLevel": 10,
+      "Description": "Remcos Remote Access Trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "Warzone RAT",
+      "Category": "RAT",
+      "FileNamePatterns": ["warzone", "avemaria"],
+      "ProcessNamePatterns": ["warzone"],
+      "RegistryPatterns": ["Warzone", "AveMaria"],
+      "ThreatLevel": 10,
+      "Description": "Warzone/AveMaria RAT - CRITICAL THREAT"
+    },
+    {
+      "Name": "Cobalt Strike",
+      "Category": "Backdoor",
+      "FileNamePatterns": ["cobaltstrike", "beacon.exe", "beacon.dll"],
+      "ProcessNamePatterns": ["beacon"],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["$$__MSVCRT__"],
+      "ThreatLevel": 10,
+      "Description": "Cobalt Strike beacon - Used by APT groups - CRITICAL THREAT"
+    },
+    {
+      "Name": "Metasploit Payload",
+      "Category": "Backdoor",
+      "FileNamePatterns": ["meterpreter", "metsrv", "msf"],
+      "ProcessNamePatterns": ["meterpreter"],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["meterpreter"],
+      "ThreatLevel": 10,
+      "Description": "Metasploit payload - CRITICAL THREAT"
+    },
+    {
+      "Name": "XMRig Cryptominer",
+      "Category": "Cryptominer",
+      "FileNamePatterns": ["xmrig", "xmr-stak", "xmrig.exe", "xmrig.json"],
+      "ProcessNamePatterns": ["xmrig", "xmr-stak"],
+      "RegistryPatterns": ["xmrig"],
+      "ContentPatterns": ["stratum+tcp://", "pool.minexmr", "cryptonight"],
+      "ThreatLevel": 9,
+      "Description": "XMRig cryptocurrency miner - uses system resources"
+    },
+    {
+      "Name": "Generic Cryptominer",
+      "Category": "Cryptominer",
+      "FileNamePatterns": ["cpuminer", "cgminer", "bfgminer", "nicehash", "minergate", "ethminer", "phoenix", "lolminer", "t-rex", "nbminer"],
+      "ProcessNamePatterns": ["miner", "cpuminer", "ethminer"],
+      "RegistryPatterns": ["miner"],
+      "ContentPatterns": ["mining.pool", "stratum://"],
+      "ThreatLevel": 9,
+      "Description": "Cryptocurrency mining software"
+    },
+    {
+      "Name": "RedLine Stealer",
+      "Category": "Stealer",
+      "FileNamePatterns": ["redline", "redline.exe"],
+      "ProcessNamePatterns": ["redline"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "RedLine credential stealer - CRITICAL THREAT"
+    },
+    {
+      "Name": "Vidar Stealer",
+      "Category": "Stealer",
+      "FileNamePatterns": ["vidar", "vidar.exe"],
+      "ProcessNamePatterns": ["vidar"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "Vidar information stealer - CRITICAL THREAT"
+    },
+    {
+      "Name": "Raccoon Stealer",
+      "Category": "Stealer",
+      "FileNamePatterns": ["raccoon", "raccoon"],
+      "ProcessNamePatterns": ["raccoon"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "Raccoon information stealer - CRITICAL THREAT"
+    },
+    {
+      "Name": "AZORult Stealer",
+      "Category": "Stealer",
+      "FileNamePatterns": ["azorult", "azor"],
+      "ProcessNamePatterns": ["azorult"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "AZORult information stealer - CRITICAL THREAT"
+    },
+    {
+      "Name": "Generic Stealer Patterns",
+      "Category": "Stealer",
+      "FileNamePatterns": ["stealer", "grabber", "passwordstealer", "credentialstealer", "pwstealer"],
+      "ProcessNamePatterns": ["stealer", "grabber"],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["Login Data", "cookies.sqlite", "key3.db", "logins.json"],
+      "ThreatLevel": 10,
+      "Description": "Password/credential stealing malware - CRITICAL THREAT"
+    },
+    {
+      "Name": "WannaCry Ransomware",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["wannacry", "wcry", "wncry", "wanacrypt"],
+      "ProcessNamePatterns": ["wannacry"],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".wncry", ".wcry"],
+      "ThreatLevel": 10,
+      "Description": "WannaCry ransomware - CRITICAL THREAT"
+    },
+    {
+      "Name": "Ryuk Ransomware",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["ryuk", "ryk"],
+      "ProcessNamePatterns": ["ryuk"],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".ryk"],
+      "ContentPatterns": ["RyukReadMe"],
+      "ThreatLevel": 10,
+      "Description": "Ryuk ransomware - CRITICAL THREAT"
+    },
+    {
+      "Name": "LockBit Ransomware",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["lockbit", "lockbit2", "lockbit3"],
+      "ProcessNamePatterns": ["lockbit"],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".lockbit"],
+      "ThreatLevel": 10,
+      "Description": "LockBit ransomware - CRITICAL THREAT"
+    },
+    {
+      "Name": "Conti Ransomware",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["conti", "conti32", "conti64"],
+      "ProcessNamePatterns": ["conti"],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".CONTI"],
+      "ThreatLevel": 10,
+      "Description": "Conti ransomware - CRITICAL THREAT"
+    },
+    {
+      "Name": "REvil/Sodinokibi Ransomware",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["revil", "sodinokibi", "sodin"],
+      "ProcessNamePatterns": ["revil", "sodinokibi"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "REvil/Sodinokibi ransomware - CRITICAL THREAT"
+    },
+    {
+      "Name": "Generic Ransomware Indicators",
+      "Category": "Ransomware",
+      "FileNamePatterns": ["ransom", "decrypt", "restore_files"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".locked", ".encrypted", ".crypt", ".enc", ".crypted", ".cerber", ".dharma", ".phobos"],
+      "ContentPatterns": ["Your files have been encrypted", "Bitcoin address", "ransom", "decrypt your files"],
+      "ThreatLevel": 10,
+      "Description": "Generic ransomware patterns - CRITICAL THREAT"
+    },
+    {
+      "Name": "Emotet",
+      "Category": "Botnet/Dropper",
+      "FileNamePatterns": ["emotet"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "Emotet banking trojan/loader - CRITICAL THREAT"
+    },
+    {
+      "Name": "TrickBot",
+      "Category": "Botnet/Trojan",
+      "FileNamePatterns": ["trickbot", "trick"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "TrickBot banking trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "QakBot/QBot",
+      "Category": "Botnet/Trojan",
+      "FileNamePatterns": ["qakbot", "qbot", "quakbot"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "QakBot banking trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "Dridex",
+      "Category": "Botnet/Trojan",
+      "FileNamePatterns": ["dridex", "bugat"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "Dridex banking trojan - CRITICAL THREAT"
+    },
+    {
+      "Name": "IcedID",
+      "Category": "Botnet/Trojan",
+      "FileNamePatterns": ["icedid", "bokbot"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 10,
+      "Description": "IcedID banking trojan - CRITICAL THREAT"
     },
     {
       "Name": "Generic Trojan Patterns",
@@ -135,52 +492,144 @@
       "ProcessNamePatterns": ["trojan", "backdoor"],
       "RegistryPatterns": ["trojan", "backdoor"],
       "ThreatLevel": 10,
-      "Description": "Generic trojan/malware patterns"
+      "Description": "Generic trojan/malware patterns - CRITICAL THREAT"
     },
     {
-      "Name": "Cryptominer",
-      "Category": "Cryptominer",
-      "FileNamePatterns": ["xmrig", "cpuminer", "cgminer", "bfgminer", "nicehash", "minergate", "coinhive"],
-      "ProcessNamePatterns": ["xmrig", "miner", "cpuminer"],
-      "RegistryPatterns": ["xmrig", "miner"],
-      "ThreatLevel": 9,
-      "Description": "Cryptocurrency mining software"
-    },
-    {
-      "Name": "Remote Access Tools",
-      "Category": "RAT",
-      "FileNamePatterns": ["njrat", "darkcomet", "poison", "blackshades", "netbus", "subseven"],
-      "ProcessNamePatterns": ["njrat", "darkcomet"],
-      "RegistryPatterns": ["njrat", "darkcomet"],
-      "ThreatLevel": 10,
-      "Description": "Known Remote Access Trojans"
-    },
-    {
-      "Name": "Suspicious DLL Injection",
-      "Category": "DLL Injection",
-      "FileNamePatterns": ["inject", "injector", "hook", "hooker"],
+      "Name": "DLL Injector Tool",
+      "Category": "HackTool",
+      "FileNamePatterns": ["inject", "injector", "hook", "hooker", "dllinjector", "memoryinjector"],
       "ProcessNamePatterns": ["inject"],
       "RegistryPatterns": [],
+      "ContentPatterns": ["VirtualAllocEx", "WriteProcessMemory", "CreateRemoteThread"],
       "ThreatLevel": 8,
-      "Description": "DLL injection tools"
+      "Description": "DLL injection tool - used to inject code into processes"
     },
     {
-      "Name": "Password Stealer",
-      "Category": "Stealer",
-      "FileNamePatterns": ["stealer", "grabber", "passwordstealer", "credentialstealer"],
-      "ProcessNamePatterns": ["stealer", "grabber"],
+      "Name": "Process Hollowing Tool",
+      "Category": "HackTool",
+      "FileNamePatterns": ["hollow", "process_hollow", "runpe"],
+      "ProcessNamePatterns": [],
       "RegistryPatterns": [],
-      "ThreatLevel": 10,
-      "Description": "Password/credential stealing malware"
+      "ContentPatterns": ["NtUnmapViewOfSection", "ZwUnmapViewOfSection"],
+      "ThreatLevel": 9,
+      "Description": "Process hollowing technique - used to hide malware"
     },
     {
-      "Name": "Adware Patterns",
+      "Name": "Mimikatz",
+      "Category": "HackTool",
+      "FileNamePatterns": ["mimikatz", "mimi", "sekurlsa"],
+      "ProcessNamePatterns": ["mimikatz"],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["mimikatz", "sekurlsa::logonpasswords"],
+      "ThreatLevel": 10,
+      "Description": "Mimikatz credential theft tool - CRITICAL THREAT"
+    },
+    {
+      "Name": "LaZagne",
+      "Category": "HackTool",
+      "FileNamePatterns": ["lazagne"],
+      "ProcessNamePatterns": ["lazagne"],
+      "RegistryPatterns": [],
+      "ThreatLevel": 9,
+      "Description": "LaZagne credential recovery tool"
+    },
+    {
+      "Name": "Rootkit Indicators",
+      "Category": "Rootkit",
+      "FileNamePatterns": ["rootkit", "r77-", "azazel", "necurs", "zeroaccess", "tdss", "alureon"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["NtSetInformationFile", "ZwSetInformationFile", "SSDT hook"],
+      "ThreatLevel": 10,
+      "Description": "Rootkit - hides malware from detection - CRITICAL THREAT"
+    },
+    {
+      "Name": "Reverse Shell",
+      "Category": "Backdoor",
+      "FileNamePatterns": ["reverse_shell", "revshell", "bind_shell", "webshell", "r57", "c99"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["cmd.exe /c", "powershell -e", "/bin/sh -i", "nc -e"],
+      "ThreatLevel": 10,
+      "Description": "Reverse/bind shell - CRITICAL THREAT"
+    },
+    {
+      "Name": "Adware/PUP Patterns",
       "Category": "Adware",
-      "FileNamePatterns": ["adware", "toolbar", "searchbar", "browser_helper"],
-      "ProcessNamePatterns": ["adware"],
-      "RegistryPatterns": ["toolbar"],
+      "FileNamePatterns": ["adware", "toolbar", "browserhelper", "searchbar", "sweetim", "conduit", "ask toolbar", "babylon"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": ["BrowserHelper", "Toolbar", "Search Redirect"],
       "ThreatLevel": 5,
-      "Description": "Adware and browser toolbars"
+      "Description": "Adware or Potentially Unwanted Program"
+    },
+    {
+      "Name": "Browser Hijacker",
+      "Category": "BrowserHijacker",
+      "FileNamePatterns": ["hijacker", "searchredirect", "homepage_modifier"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": ["Start Page", "Search Page", "Default_Search_URL"],
+      "ThreatLevel": 6,
+      "Description": "Browser hijacker - modifies browser settings"
+    },
+    {
+      "Name": "Double Extension Trick",
+      "Category": "Suspicious",
+      "FileNamePatterns": [],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".pdf.exe", ".doc.exe", ".jpg.exe", ".mp3.exe", ".txt.exe", ".docx.scr", ".xlsx.exe", ".ppt.exe", ".png.exe"],
+      "ThreatLevel": 9,
+      "Description": "Double file extension - common social engineering technique"
+    },
+    {
+      "Name": "Suspicious Script Files",
+      "Category": "Suspicious",
+      "FileNamePatterns": [],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".vbs", ".vbe", ".wsf", ".wsh", ".hta", ".jse"],
+      "ContentPatterns": ["WScript.Shell", "Scripting.FileSystemObject", "ADODB.Stream"],
+      "ThreatLevel": 7,
+      "Description": "Script file with suspicious content"
+    },
+    {
+      "Name": "PowerShell Downloader",
+      "Category": "Suspicious",
+      "FileNamePatterns": [],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["Invoke-Expression", "IEX", "DownloadString", "WebClient", "-enc ", "-EncodedCommand", "bypass"],
+      "ThreatLevel": 8,
+      "Description": "PowerShell with download/execution capabilities"
+    },
+    {
+      "Name": "Office Macro Malware",
+      "Category": "Macro",
+      "FileNamePatterns": [],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "FileExtensionPatterns": [".docm", ".xlsm", ".pptm", ".dotm", ".xltm"],
+      "ContentPatterns": ["AutoOpen", "Auto_Open", "Document_Open", "Workbook_Open", "Shell"],
+      "ThreatLevel": 7,
+      "Description": "Office document with potentially malicious macros"
+    },
+    {
+      "Name": "Exploit Kit Artifacts",
+      "Category": "ExploitKit",
+      "FileNamePatterns": ["exploit", "exp-", "cve-"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 9,
+      "Description": "Exploit kit artifacts"
+    },
+    {
+      "Name": "Worm Indicators",
+      "Category": "Worm",
+      "FileNamePatterns": ["worm", "conficker", "mydoom", "sasser", "netsky"],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ThreatLevel": 9,
+      "Description": "Network worm indicators"
     }
   ],
   "BoosterPatterns": [
@@ -197,15 +646,51 @@
     "[crack]",
     "[keygen]",
     "(crack)",
-    "(keygen)"
+    "(keygen)",
+    ".fixed",
+    "-fixed",
+    ".patched",
+    "-patched",
+    ".loader",
+    "-loader"
   ],
   "SafeContextPaths": [
     "\\Windows\\",
+    "\\Windows\\System32\\",
+    "\\Windows\\SysWOW64\\",
     "\\Program Files\\Microsoft",
     "\\Program Files (x86)\\Microsoft",
     "\\Steam\\steamapps\\common\\",
     "\\Epic Games\\",
-    "\\GOG Galaxy\\"
+    "\\GOG Galaxy\\",
+    "\\Origin Games\\",
+    "\\Ubisoft\\",
+    "\\Visual Studio\\",
+    "\\JetBrains\\",
+    "\\node_modules\\",
+    "\\packages\\",
+    "\\.git\\"
   ],
-  "SuspiciousPorts": [4444, 5555, 6666, 7777, 8888, 9999, 31337, 12345, 65535]
+  "SuspiciousPorts": [
+    4444, 5555, 6666, 7777, 8888, 9999,
+    31337, 12345, 65535, 1337, 1338,
+    4443, 8443, 8080, 3389, 5900, 5901,
+    6667, 6668, 6669, 1080, 9050, 9150
+  ],
+  "RegistryPersistenceKeys": [
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunServices",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunServicesOnce",
+    "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\User Shell Folders",
+    "SYSTEM\\CurrentControlSet\\Services",
+    "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Browser Helper Objects",
+    "SOFTWARE\\Classes\\*\\shellex\\ContextMenuHandlers",
+    "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Windows",
+    "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options",
+    "SOFTWARE\\Microsoft\\Active Setup\\Installed Components",
+    "SYSTEM\\CurrentControlSet\\Control\\Session Manager"
+  ]
 }
