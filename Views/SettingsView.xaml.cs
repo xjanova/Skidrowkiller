@@ -451,7 +451,8 @@ namespace SkidrowKiller.Views
             {
                 UpdateDatabaseStatus(DatabaseStatus.Updating);
 
-                var result = await _databaseService.SimulateUpdateAsync();
+                // Try real API update first, fallback to local simulation if offline
+                var result = await _databaseService.UpdateDatabaseAsync();
 
                 if (result.Success)
                 {

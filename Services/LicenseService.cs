@@ -14,17 +14,27 @@ namespace SkidrowKiller.Services
 {
     /// <summary>
     /// License service for XMAN Studio integration.
-    /// API Base: https://xmanstudio.com/api/v1/license
+    /// API Base: https://xman4289.com/api/v1/license (production server - pending launch)
+    ///
+    /// This service provides:
+    /// - License key activation and validation
+    /// - Machine-based device registration
+    /// - Trial/demo mode with offline support
+    /// - Automatic connectivity checking with grace period
+    /// - Encrypted local license storage
+    ///
+    /// Note: Until xman4289.com is launched, the app runs in extended trial mode.
     /// </summary>
     public class LicenseService
     {
+        // Production API (will be enabled when xman4289.com launches)
         private const string API_BASE_URL = "https://xman4289.com/api/v1/license";
         private const string PRODUCT_ID = "skidrow-killer";
         private const string LICENSE_FILE = "license.dat";
         private const string CONNECTIVITY_FILE = "connectivity.dat";
-        private const int OFFLINE_GRACE_PERIOD_HOURS = 24; // 1 day offline grace period
+        private const int OFFLINE_GRACE_PERIOD_HOURS = 168; // 7 days offline grace period (extended for pre-launch)
         private const int MAX_ACTIVATIONS = 3; // Max devices per license
-        private const int TRIAL_DAYS = 7; // Trial period in days
+        private const int TRIAL_DAYS = 30; // Extended trial period (pre-launch)
 
         private readonly HttpClient _httpClient;
         private readonly ILogger _logger;

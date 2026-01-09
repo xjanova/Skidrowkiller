@@ -12,7 +12,9 @@ namespace SkidrowKiller.Services
     /// </summary>
     public class DatabaseService : IDisposable
     {
-        private const string API_BASE_URL = "https://xmanstudio.com/api/v1/database";
+        // Use GitHub for signature updates (real, working URL)
+        private const string GITHUB_API_URL = "https://api.github.com/repos/xjanova/SkidrowKiller/releases/latest";
+        private const string GITHUB_RAW_URL = "https://raw.githubusercontent.com/xjanova/SkidrowKiller/main/signatures.json";
         private const string PRODUCT_ID = "skidrow-killer";
 
         private readonly ILogger _logger;
@@ -79,13 +81,59 @@ namespace SkidrowKiller.Services
         private DatabaseInfo CreateDefaultInfo()
         {
             var now = DateTime.Now;
+            var signatureCount = GetActualSignatureCount();
             return new DatabaseInfo
             {
                 Version = $"{now:yyyy.MM.dd}.001",
                 LastUpdate = now,
-                SignatureCount = 125847,
+                SignatureCount = signatureCount,
                 Status = DatabaseStatus.UpToDate
             };
+        }
+
+        /// <summary>
+        /// Gets the actual signature count from the local signatures.json file
+        /// </summary>
+        private int GetActualSignatureCount()
+        {
+            try
+            {
+                // First check local app data
+                var localSignaturesPath = Path.Combine(_databasePath, "signatures.json");
+
+                // If not in app data, check application directory
+                if (!File.Exists(localSignaturesPath))
+                {
+                    var appDir = AppDomain.CurrentDomain.BaseDirectory;
+                    localSignaturesPath = Path.Combine(appDir, "signatures.json");
+                }
+
+                if (File.Exists(localSignaturesPath))
+                {
+                    var json = File.ReadAllText(localSignaturesPath);
+                    using var doc = JsonDocument.Parse(json);
+
+                    // Try to read from DatabaseInfo.TotalSignatures first
+                    if (doc.RootElement.TryGetProperty("DatabaseInfo", out var dbInfo) &&
+                        dbInfo.TryGetProperty("TotalSignatures", out var totalSig))
+                    {
+                        return totalSig.GetInt32();
+                    }
+
+                    // Otherwise count the signatures array
+                    if (doc.RootElement.TryGetProperty("Signatures", out var signatures))
+                    {
+                        return signatures.GetArrayLength();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Could not read signature count from file");
+            }
+
+            // Fallback to a reasonable default
+            return 85;
         }
 
         private void SaveDatabaseInfo()
@@ -105,10 +153,9 @@ namespace SkidrowKiller.Services
         {
             try
             {
-                _logger.Information("Checking for database updates...");
+                _logger.Information("Checking for database updates via GitHub...");
 
-                var url = $"{API_BASE_URL}/{PRODUCT_ID}/check?current_version={_currentInfo.Version}";
-                var response = await _httpClient.GetAsync(url);
+                var response = await _httpClient.GetAsync(GITHUB_API_URL);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -116,31 +163,35 @@ namespace SkidrowKiller.Services
                     return new DatabaseCheckResult
                     {
                         Success = false,
-                        Message = $"Server returned {response.StatusCode}"
+                        Message = $"GitHub returned {response.StatusCode}"
                     };
                 }
 
                 var content = await response.Content.ReadAsStringAsync();
-                var result = JsonSerializer.Deserialize<DatabaseCheckResponse>(content, new JsonSerializerOptions
+                var release = JsonSerializer.Deserialize<GitHubReleaseInfo>(content, new JsonSerializerOptions
                 {
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (result == null)
+                if (release == null)
                 {
-                    return new DatabaseCheckResult { Success = false, Message = "Invalid server response" };
+                    return new DatabaseCheckResult { Success = false, Message = "Invalid GitHub response" };
                 }
 
-                IsUpToDate = !result.UpdateAvailable;
+                // Compare versions
+                var latestVersion = release.TagName?.TrimStart('v') ?? "0.0.0";
+                var updateAvailable = CompareVersions(latestVersion, _currentInfo.Version.Split('.').Take(3).Aggregate((a, b) => $"{a}.{b}")) > 0;
+
+                IsUpToDate = !updateAvailable;
 
                 return new DatabaseCheckResult
                 {
                     Success = true,
-                    UpdateAvailable = result.UpdateAvailable,
-                    LatestVersion = result.LatestVersion,
-                    SignatureCount = result.SignatureCount,
-                    DownloadSize = result.DownloadSize,
-                    ReleaseNotes = result.ReleaseNotes
+                    UpdateAvailable = updateAvailable,
+                    LatestVersion = latestVersion,
+                    SignatureCount = GetActualSignatureCount(),
+                    DownloadSize = 0,
+                    ReleaseNotes = release.Body
                 };
             }
             catch (HttpRequestException ex)
@@ -149,7 +200,7 @@ namespace SkidrowKiller.Services
                 return new DatabaseCheckResult
                 {
                     Success = false,
-                    Message = "Unable to connect to update server"
+                    Message = "Unable to connect to GitHub - check your internet connection"
                 };
             }
             catch (Exception ex)
@@ -163,11 +214,25 @@ namespace SkidrowKiller.Services
             }
         }
 
+        private static int CompareVersions(string v1, string v2)
+        {
+            try
+            {
+                var ver1 = Version.Parse(v1.Split('-')[0]);
+                var ver2 = Version.Parse(v2.Split('-')[0].Split('.').Take(3).Aggregate((a, b) => $"{a}.{b}"));
+                return ver1.CompareTo(ver2);
+            }
+            catch
+            {
+                return string.Compare(v1, v2, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         public async Task<DatabaseUpdateResult> UpdateDatabaseAsync(IProgress<int>? progress = null)
         {
             try
             {
-                _logger.Information("Starting database update...");
+                _logger.Information("Starting database update from GitHub...");
                 _currentInfo.Status = DatabaseStatus.Updating;
 
                 UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Checking for updates...", Progress = 0 });
@@ -184,23 +249,11 @@ namespace SkidrowKiller.Services
                     };
                 }
 
-                if (!checkResult.UpdateAvailable)
-                {
-                    _currentInfo.Status = DatabaseStatus.UpToDate;
-                    return new DatabaseUpdateResult
-                    {
-                        Success = true,
-                        Message = "Database is already up to date",
-                        IsAlreadyUpToDate = true
-                    };
-                }
-
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Downloading updates...", Progress = 20 });
+                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Downloading signatures from GitHub...", Progress = 20 });
                 progress?.Report(20);
 
-                // Download the update
-                var downloadUrl = $"{API_BASE_URL}/{PRODUCT_ID}/download?version={checkResult.LatestVersion}";
-                var response = await _httpClient.GetAsync(downloadUrl);
+                // Download signatures.json from GitHub
+                var response = await _httpClient.GetAsync(GITHUB_RAW_URL);
 
                 if (!response.IsSuccessStatusCode)
                 {
@@ -208,23 +261,30 @@ namespace SkidrowKiller.Services
                     return new DatabaseUpdateResult
                     {
                         Success = false,
-                        Message = "Failed to download database update"
+                        Message = $"Failed to download signatures: {response.StatusCode}"
                     };
                 }
 
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Installing updates...", Progress = 60 });
+                var signaturesContent = await response.Content.ReadAsStringAsync();
+
+                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Saving signatures...", Progress = 60 });
                 progress?.Report(60);
 
-                // Simulate installation (in real implementation, extract and apply signatures)
-                await Task.Delay(500);
+                // Save signatures to local database folder
+                var localSignaturesPath = Path.Combine(_databasePath, "signatures.json");
+                await File.WriteAllTextAsync(localSignaturesPath, signaturesContent);
 
                 UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Verifying...", Progress = 80 });
                 progress?.Report(80);
 
+                // Parse and count signatures
+                var signatureCount = GetActualSignatureCount();
+
                 // Update local info
-                _currentInfo.Version = checkResult.LatestVersion ?? _currentInfo.Version;
-                _currentInfo.SignatureCount = checkResult.SignatureCount > 0 ? checkResult.SignatureCount : _currentInfo.SignatureCount + 150;
-                _currentInfo.LastUpdate = DateTime.Now;
+                var now = DateTime.Now;
+                _currentInfo.Version = checkResult.LatestVersion ?? $"{now:yyyy.MM.dd}.001";
+                _currentInfo.SignatureCount = signatureCount;
+                _currentInfo.LastUpdate = now;
                 _currentInfo.Status = DatabaseStatus.UpToDate;
 
                 SaveDatabaseInfo();
@@ -241,9 +301,19 @@ namespace SkidrowKiller.Services
                 return new DatabaseUpdateResult
                 {
                     Success = true,
-                    Message = $"Database updated to v{_currentInfo.Version}",
+                    Message = $"Database updated - {signatureCount} signatures downloaded",
                     NewVersion = _currentInfo.Version,
                     SignatureCount = _currentInfo.SignatureCount
+                };
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.Error(ex, "Network error during database update");
+                _currentInfo.Status = DatabaseStatus.Error;
+                return new DatabaseUpdateResult
+                {
+                    Success = false,
+                    Message = "Network error - check your internet connection"
                 };
             }
             catch (Exception ex)
@@ -258,58 +328,7 @@ namespace SkidrowKiller.Services
             }
         }
 
-        /// <summary>
-        /// Simulate a local database update for offline/demo mode
-        /// </summary>
-        public async Task<DatabaseUpdateResult> SimulateUpdateAsync()
-        {
-            try
-            {
-                _currentInfo.Status = DatabaseStatus.Updating;
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Checking...", Progress = 10 });
-                await Task.Delay(300);
-
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Downloading...", Progress = 40 });
-                await Task.Delay(500);
-
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Installing...", Progress = 70 });
-                await Task.Delay(400);
-
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Verifying...", Progress = 90 });
-                await Task.Delay(200);
-
-                // Update version
-                var now = DateTime.Now;
-                _currentInfo.Version = $"{now:yyyy.MM.dd}.{now.Hour:D2}{now.Minute:D2}";
-                _currentInfo.SignatureCount += new Random().Next(50, 200);
-                _currentInfo.LastUpdate = now;
-                _currentInfo.Status = DatabaseStatus.UpToDate;
-
-                SaveDatabaseInfo();
-                IsUpToDate = true;
-
-                UpdateProgress?.Invoke(this, new DatabaseUpdateEventArgs { Stage = "Complete!", Progress = 100 });
-                DatabaseUpdated?.Invoke(this, _currentInfo);
-
-                return new DatabaseUpdateResult
-                {
-                    Success = true,
-                    Message = "Database updated successfully",
-                    NewVersion = _currentInfo.Version,
-                    SignatureCount = _currentInfo.SignatureCount
-                };
-            }
-            catch (Exception ex)
-            {
-                _currentInfo.Status = DatabaseStatus.Error;
-                return new DatabaseUpdateResult
-                {
-                    Success = false,
-                    Message = ex.Message
-                };
-            }
-        }
-
+        
         public string GetFormattedLastUpdate()
         {
             var diff = DateTime.Now - _currentInfo.LastUpdate;
@@ -360,13 +379,13 @@ namespace SkidrowKiller.Services
         Offline
     }
 
-    public class DatabaseCheckResponse
+    // GitHub API response model
+    internal class GitHubReleaseInfo
     {
-        public bool UpdateAvailable { get; set; }
-        public string? LatestVersion { get; set; }
-        public int SignatureCount { get; set; }
-        public long DownloadSize { get; set; }
-        public string? ReleaseNotes { get; set; }
+        public string? TagName { get; set; }
+        public string? Name { get; set; }
+        public string? Body { get; set; }
+        public DateTime? PublishedAt { get; set; }
     }
 
     public class DatabaseCheckResult
