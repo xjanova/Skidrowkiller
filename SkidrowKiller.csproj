@@ -9,9 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SkidrowKiller</RootNamespace>
     <AssemblyName>SkidrowKiller</AssemblyName>
-    <Version>2.1.0</Version>
-    <FileVersion>2.1.0.0</FileVersion>
-    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <Version>3.3.0</Version>
+    <FileVersion>3.3.0.0</FileVersion>
+    <AssemblyVersion>3.3.0.0</AssemblyVersion>
     <Authors>xman studio</Authors>
     <Company>xman studio</Company>
     <Product>Skidrow Killer</Product>
@@ -46,6 +46,7 @@
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

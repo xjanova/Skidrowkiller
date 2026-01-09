@@ -444,6 +444,7 @@ namespace SkidrowKiller.Views
                 UpdateDatabaseInfo();
             });
         }
+
     }
 
     /// <summary>

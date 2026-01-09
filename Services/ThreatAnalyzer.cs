@@ -1,79 +1,145 @@
 using System.IO;
+using Microsoft.Extensions.Logging;
 using SkidrowKiller.Models;
 
 namespace SkidrowKiller.Services
 {
     /// <summary>
-    /// Intelligent threat analysis with scoring system to reduce false positives.
-    /// Uses multiple factors to determine threat severity.
+    /// Advanced threat analysis engine that integrates multiple detection methods:
+    /// - Signature-based detection (patterns, hashes)
+    /// - Heuristic analysis (behavior, characteristics)
+    /// - PE file analysis (entropy, packing, imports)
+    /// - YARA-style rules
+    /// - Behavioral API pattern analysis
+    /// - Entropy-based packing detection
+    /// - VirusTotal cloud lookup
     /// </summary>
     public class ThreatAnalyzer
     {
-        // High confidence patterns (exact match malware groups)
+        private readonly WhitelistManager _whitelistManager;
+        private readonly MalwareSignatureDatabase _signatureDb;
+        private readonly PEAnalyzer _peAnalyzer;
+        private readonly HeuristicEngine _heuristicEngine;
+        private readonly BehavioralAnalyzer? _behavioralAnalyzer;
+        private readonly EntropyAnalyzer? _entropyAnalyzer;
+        private readonly VirusTotalService? _virusTotalService;
+        private readonly ILogger<ThreatAnalyzer>? _logger;
+
+        // Legacy pattern dictionaries for backwards compatibility
         private readonly Dictionary<string, int> _highConfidencePatterns = new(StringComparer.OrdinalIgnoreCase)
         {
             // Scene groups - high score when found with context
-            { "skidrow", 40 },
-            { "skid-row", 40 },
-            { "skid_row", 40 },
-            { "reloaded", 30 },
-            { "codex", 30 },
-            { "plaza", 25 },
-            { "cpy", 30 },
-            { "steampunks", 35 },
-            { "hoodlum", 30 },
-            { "prophet", 25 },
-            { "flt", 20 },
-            { "razor1911", 35 },
-            { "empress", 35 },
+            { "skidrow", 45 },
+            { "skid-row", 45 },
+            { "skid_row", 45 },
+            { "reloaded", 35 },
+            { "codex", 35 },
+            { "plaza", 30 },
+            { "cpy", 35 },
+            { "steampunks", 40 },
+            { "hoodlum", 35 },
+            { "prophet", 30 },
+            { "flt", 25 },
+            { "razor1911", 40 },
+            { "empress", 40 },
+            { "fitgirl", 35 },
+            { "dodi", 30 },
+            { "elamigos", 30 },
+            // Chinese crack groups (higher risk of bundled malware)
+            { "3dm", 50 },
+            { "3dmgame", 50 },
+            { "ali213", 50 },
         };
 
-        // Medium confidence patterns (could be false positive)
         private readonly Dictionary<string, int> _mediumConfidencePatterns = new(StringComparer.OrdinalIgnoreCase)
         {
-            { "crack", 15 },   // Reduced - could be legitimate
-            { "keygen", 25 },
-            { "patch", 10 },   // Very low - many legitimate patches
-            { "loader", 10 },  // Very low - legitimate game loaders exist
-            { "trainer", 15 },
-            { "nocd", 30 },
-            { "nodvd", 30 },
+            { "crack", 20 },
+            { "keygen", 35 },
+            { "patch", 15 },
+            { "loader", 15 },
+            { "trainer", 20 },
+            { "nocd", 35 },
+            { "nodvd", 35 },
+            { "activator", 40 },
+            { "kmspico", 50 },
+            { "kmsauto", 50 },
+            { "hwidgen", 45 },
         };
 
-        // Suspicious DLLs (fake Steam DLLs)
         private readonly Dictionary<string, int> _suspiciousDlls = new(StringComparer.OrdinalIgnoreCase)
         {
-            { "steam_api.dll", 25 },      // Could be legitimate
-            { "steam_api64.dll", 25 },
-            { "steamclient.dll", 30 },
-            { "steamclient64.dll", 30 },
-            { "steam_emu.dll", 50 },      // Emulator = high score
-            { "cream_api.dll", 50 },      // DLC unlocker
-            { "uwpsteamapi.dll", 40 },
-            { "goldberg_steam_api.dll", 50 },
-            { "sse.dll", 40 },
-            { "SmartSteamEmu.dll", 50 },
+            { "steam_api.dll", 30 },
+            { "steam_api64.dll", 30 },
+            { "steamclient.dll", 35 },
+            { "steamclient64.dll", 35 },
+            { "steam_emu.dll", 55 },
+            { "cream_api.dll", 55 },
+            { "uwpsteamapi.dll", 45 },
+            { "goldberg_steam_api.dll", 55 },
+            { "sse.dll", 45 },
+            { "SmartSteamEmu.dll", 55 },
+            { "origin_emu.dll", 50 },
         };
 
-        // File extensions that are highly suspicious
+        private readonly Dictionary<string, int> _malwarePatterns = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // RATs
+            { "njrat", 90 },
+            { "darkcomet", 90 },
+            { "asyncrat", 90 },
+            { "quasarrat", 90 },
+            { "orcusrat", 90 },
+            { "nanocore", 90 },
+            { "remcos", 85 },
+            { "warzone", 85 },
+            // Stealers
+            { "redline", 90 },
+            { "vidar", 90 },
+            { "raccoon", 90 },
+            { "azorult", 90 },
+            // Ransomware
+            { "wannacry", 95 },
+            { "ryuk", 95 },
+            { "lockbit", 95 },
+            { "conti", 95 },
+            { "revil", 95 },
+            // Cryptominers
+            { "xmrig", 80 },
+            { "cpuminer", 80 },
+            { "cgminer", 80 },
+            { "ethminer", 80 },
+            // Botnet
+            { "emotet", 95 },
+            { "trickbot", 95 },
+            { "qakbot", 95 },
+            { "dridex", 95 },
+            // Generic
+            { "trojan", 85 },
+            { "backdoor", 85 },
+            { "rootkit", 90 },
+            { "keylogger", 85 },
+            { "spyware", 80 },
+        };
+
         private readonly Dictionary<string, int> _suspiciousExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             { ".crack", 60 },
             { ".keygen", 60 },
-            { ".exe.bak", 30 },
-            { ".dll.bak", 30 },
+            { ".exe.bak", 35 },
+            { ".dll.bak", 35 },
+            { ".pdf.exe", 80 },
+            { ".doc.exe", 80 },
+            { ".jpg.exe", 80 },
+            { ".txt.exe", 80 },
+            { ".mp3.exe", 80 },
         };
 
-        // Booster patterns - increase score when found together
-        private readonly string[] _boosterPatterns = new[]
-        {
+        private readonly string[] _boosterPatterns = {
             "game", "steam", "origin", "ubisoft", "epic", "gog",
-            "fix", "update", "release", "v1.", "v2.", "-"
+            "fix", "update", "release", "v1.", "v2.", "-", "_"
         };
 
-        // Reducer patterns - decrease score (legitimate contexts)
-        private readonly string[] _safeContextPatterns = new[]
-        {
+        private readonly string[] _safeContextPatterns = {
             "microsoft", "windows", "system32", "syswow64",
             "nvidia", "amd", "intel", "realtek",
             "visual studio", "dotnet", ".net",
@@ -81,15 +147,68 @@ namespace SkidrowKiller.Services
             "node_modules", "packages", "nuget",
             "documentation", "docs", "readme",
             "backup", "archive", "old",
+            "jetbrains", "vscode", "sublime",
         };
 
-        private readonly WhitelistManager _whitelistManager;
+        // Configurable thresholds
+        public int MinimumScoreToReport { get; set; } = 20;
+        public int CriticalScoreThreshold { get; set; } = 80;
+        public int HighScoreThreshold { get; set; } = 60;
+        public int MediumScoreThreshold { get; set; } = 40;
+        public int LowScoreThreshold { get; set; } = 20;
+        public bool EnableDeepAnalysis { get; set; } = true;
+        public bool EnablePEAnalysis { get; set; } = true;
+        public bool EnableHeuristicAnalysis { get; set; } = true;
+        public bool EnableBehavioralAnalysis { get; set; } = true;
+        public bool EnableEntropyAnalysis { get; set; } = true;
+        public bool EnableVirusTotalLookup { get; set; } = false; // Disabled by default (needs API key)
 
-        public ThreatAnalyzer(WhitelistManager whitelistManager)
+        public ThreatAnalyzer(WhitelistManager whitelistManager, ILogger<ThreatAnalyzer>? logger = null)
         {
             _whitelistManager = whitelistManager;
+            _logger = logger;
+            _signatureDb = new MalwareSignatureDatabase();
+            _peAnalyzer = new PEAnalyzer(_signatureDb);
+            _heuristicEngine = new HeuristicEngine(_signatureDb, _peAnalyzer);
+            _behavioralAnalyzer = new BehavioralAnalyzer(null);
+            _entropyAnalyzer = new EntropyAnalyzer(null);
         }
 
+        /// <summary>
+        /// Constructor with full dependency injection
+        /// </summary>
+        public ThreatAnalyzer(
+            WhitelistManager whitelistManager,
+            BehavioralAnalyzer? behavioralAnalyzer,
+            EntropyAnalyzer? entropyAnalyzer,
+            VirusTotalService? virusTotalService,
+            ILogger<ThreatAnalyzer>? logger = null)
+        {
+            _whitelistManager = whitelistManager;
+            _behavioralAnalyzer = behavioralAnalyzer;
+            _entropyAnalyzer = entropyAnalyzer;
+            _virusTotalService = virusTotalService;
+            _logger = logger;
+            _signatureDb = new MalwareSignatureDatabase();
+            _peAnalyzer = new PEAnalyzer(_signatureDb);
+            _heuristicEngine = new HeuristicEngine(_signatureDb, _peAnalyzer);
+        }
+
+        /// <summary>
+        /// Configures VirusTotal integration
+        /// </summary>
+        public void ConfigureVirusTotal(string apiKey)
+        {
+            if (_virusTotalService != null && !string.IsNullOrEmpty(apiKey))
+            {
+                _virusTotalService.Configure(apiKey);
+                EnableVirusTotalLookup = true;
+            }
+        }
+
+        /// <summary>
+        /// Analyzes a file path for potential threats using multiple detection methods
+        /// </summary>
         public ThreatInfo? AnalyzePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return null;
@@ -111,7 +230,18 @@ namespace SkidrowKiller.Services
             var lowerPath = path.ToLower();
             var lowerName = name.ToLower();
 
-            // Check for safe context (reduces false positives)
+            // 1. Check signature database first
+            var sigMatch = _signatureDb.CheckPath(path);
+            if (sigMatch != null)
+            {
+                score += sigMatch.MatchScore;
+                foreach (var reason in sigMatch.MatchReasons)
+                {
+                    matchedPatterns.Add($"[SIG] {reason}");
+                }
+            }
+
+            // 2. Check for safe context (reduces false positives)
             var safeContextScore = 0;
             foreach (var safePattern in _safeContextPatterns)
             {
@@ -121,7 +251,17 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Check high confidence patterns
+            // 3. Check malware patterns first (highest priority)
+            foreach (var (pattern, patternScore) in _malwarePatterns)
+            {
+                if (lowerName.Contains(pattern) || lowerPath.Contains($"\\{pattern}\\"))
+                {
+                    score += patternScore;
+                    matchedPatterns.Add($"[MALWARE] {pattern}");
+                }
+            }
+
+            // 4. Check high confidence patterns (scene groups)
             foreach (var (pattern, patternScore) in _highConfidencePatterns)
             {
                 if (lowerName.Contains(pattern) || lowerPath.Contains($"\\{pattern}\\"))
@@ -131,7 +271,7 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Check medium confidence patterns
+            // 5. Check medium confidence patterns
             foreach (var (pattern, patternScore) in _mediumConfidencePatterns)
             {
                 if (lowerName.Contains(pattern))
@@ -141,7 +281,7 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Check suspicious DLLs
+            // 6. Check suspicious DLLs
             if (isFile)
             {
                 foreach (var (dll, dllScore) in _suspiciousDlls)
@@ -163,7 +303,7 @@ namespace SkidrowKiller.Services
                     }
                 }
 
-                // Check suspicious extensions
+                // 7. Check suspicious extensions
                 foreach (var (ext, extScore) in _suspiciousExtensions)
                 {
                     if (lowerName.EndsWith(ext))
@@ -174,38 +314,45 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Apply booster (multiple patterns together = more suspicious)
+            // 8. Apply booster (multiple patterns together = more suspicious)
             var boosterCount = _boosterPatterns.Count(p => lowerPath.Contains(p));
             if (boosterCount >= 2 && score > 0)
             {
-                score += boosterCount * 5;
+                var boostAmount = boosterCount * 5;
+                score += boostAmount;
+                matchedPatterns.Add($"[BOOST] +{boostAmount} (context)");
             }
 
-            // Apply safe context reduction
-            score = Math.Max(0, score - safeContextScore);
+            // 9. Apply safe context reduction
+            if (safeContextScore > 0)
+            {
+                var reduction = Math.Min(safeContextScore, score / 2);
+                score = Math.Max(0, score - reduction);
+                if (reduction > 0)
+                {
+                    matchedPatterns.Add($"[SAFE] -{reduction} (trusted context)");
+                }
+            }
 
-            // Apply caution directory penalty (ask more questions)
+            // 10. Apply caution directory penalty
             if (_whitelistManager.IsInCautionDirectory(path) && score < 50)
             {
-                // Lower the score for items in caution directories unless very suspicious
+                var originalScore = score;
                 score = (int)(score * 0.7);
+                if (originalScore != score)
+                {
+                    matchedPatterns.Add($"[CAUTION] -30% (protected directory)");
+                }
             }
 
             // No patterns matched = safe
-            if (matchedPatterns.Count == 0 || score == 0)
+            if (matchedPatterns.Count == 0 || score < MinimumScoreToReport)
             {
                 return null;
             }
 
             // Determine severity based on score
-            var severity = score switch
-            {
-                >= 80 => ThreatSeverity.Critical,
-                >= 60 => ThreatSeverity.High,
-                >= 40 => ThreatSeverity.Medium,
-                >= 20 => ThreatSeverity.Low,
-                _ => ThreatSeverity.Safe
-            };
+            var severity = DetermineServerity(score);
 
             // Very low score = don't report
             if (severity == ThreatSeverity.Safe)
@@ -225,6 +372,239 @@ namespace SkidrowKiller.Services
             };
         }
 
+        /// <summary>
+        /// Deep analysis of a file including PE analysis, heuristics, and YARA rules
+        /// </summary>
+        public async Task<ThreatInfo?> AnalyzePathDeepAsync(string path)
+        {
+            // Start with basic analysis
+            var threat = AnalyzePath(path);
+
+            if (!EnableDeepAnalysis) return threat;
+
+            // If it's a file, perform deeper analysis
+            if (!File.Exists(path)) return threat;
+
+            var extension = Path.GetExtension(path).ToLower();
+            var isExecutable = extension == ".exe" || extension == ".dll" || extension == ".scr" || extension == ".sys";
+
+            // Initialize threat if needed
+            threat ??= new ThreatInfo
+            {
+                Type = ThreatType.File,
+                Path = path,
+                Name = Path.GetFileName(path),
+                Score = 0,
+                MatchedPatterns = new List<string>()
+            };
+
+            try
+            {
+                // 1. Hash-based detection
+                var sha256 = await _signatureDb.ComputeSHA256Async(path);
+                if (!string.IsNullOrEmpty(sha256))
+                {
+                    var hashMatch = _signatureDb.CheckHash(sha256, HashType.SHA256);
+                    if (hashMatch != null)
+                    {
+                        threat.Score += hashMatch.ThreatLevel * 10;
+                        threat.MatchedPatterns.Add($"[HASH] {hashMatch.MalwareName} ({hashMatch.MalwareFamily})");
+                    }
+                }
+
+                // 2. PE Analysis for executables
+                if (isExecutable && EnablePEAnalysis)
+                {
+                    var peResult = await _peAnalyzer.AnalyzeAsync(path);
+                    if (peResult.IsValid)
+                    {
+                        threat.Score += peResult.ThreatScore / 2;
+
+                        if (peResult.IsPacked)
+                        {
+                            threat.MatchedPatterns.Add($"[PE] Packed ({peResult.PackerName})");
+                        }
+
+                        if (peResult.HasEmbeddedExecutable)
+                        {
+                            threat.MatchedPatterns.Add($"[PE] Embedded executable");
+                        }
+
+                        foreach (var technique in peResult.DetectedTechniques.Take(3))
+                        {
+                            threat.MatchedPatterns.Add($"[PE] {technique}");
+                        }
+
+                        if (peResult.SuspiciousImports.Count > 5)
+                        {
+                            threat.MatchedPatterns.Add($"[PE] {peResult.SuspiciousImports.Count} suspicious imports");
+                        }
+                    }
+                }
+
+                // 3. YARA rule scanning
+                var yaraMatches = await _signatureDb.ScanWithYaraAsync(path);
+                foreach (var match in yaraMatches)
+                {
+                    threat.Score += match.Rule.ThreatLevel * 5;
+                    threat.MatchedPatterns.Add($"[YARA] {match.Rule.Name}");
+                }
+
+                // 4. Content signature analysis
+                var contentMatch = await _signatureDb.CheckFileContentAsync(path);
+                if (contentMatch != null && contentMatch.MatchScore > 0)
+                {
+                    threat.Score += contentMatch.MatchScore / 2;
+                    foreach (var reason in contentMatch.MatchReasons.Where(r => r.Contains("Content")))
+                    {
+                        threat.MatchedPatterns.Add($"[CONTENT] {reason}");
+                    }
+                }
+
+                // 5. Heuristic analysis
+                if (EnableHeuristicAnalysis)
+                {
+                    var heuristicResult = await _heuristicEngine.AnalyzeFileAsync(path);
+                    if (heuristicResult.Score > 20)
+                    {
+                        threat.Score += heuristicResult.Score / 3;
+
+                        foreach (var indicator in heuristicResult.SuspiciousIndicators.Take(3))
+                        {
+                            threat.MatchedPatterns.Add($"[HEUR] {indicator}");
+                        }
+
+                        foreach (var technique in heuristicResult.DetectedTechniques)
+                        {
+                            threat.MatchedPatterns.Add($"[TECH] {technique}");
+                        }
+                    }
+                }
+
+                // 6. Behavioral API analysis
+                if (EnableBehavioralAnalysis && _behavioralAnalyzer != null && isExecutable)
+                {
+                    try
+                    {
+                        var behaviorResult = _behavioralAnalyzer.AnalyzeFile(path);
+                        if (behaviorResult.IsSuspicious)
+                        {
+                            threat.Score += behaviorResult.TotalScore / 3;
+
+                            foreach (var api in behaviorResult.SuspiciousApis.Take(3))
+                            {
+                                threat.MatchedPatterns.Add($"[API] {api.Name} ({api.Category})");
+                            }
+
+                            foreach (var pattern in behaviorResult.DetectedPatterns.Take(2))
+                            {
+                                threat.MatchedPatterns.Add($"[BEHAVIOR] {pattern.Name}");
+                            }
+
+                            if (behaviorResult.SuspiciousStrings.Count > 0)
+                            {
+                                threat.MatchedPatterns.Add($"[STRINGS] {behaviorResult.SuspiciousStrings.Count} suspicious strings");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "Behavioral analysis failed for {Path}", path);
+                    }
+                }
+
+                // 7. Entropy analysis (packing detection)
+                if (EnableEntropyAnalysis && _entropyAnalyzer != null && isExecutable)
+                {
+                    try
+                    {
+                        var entropyResult = await _entropyAnalyzer.AnalyzeFileAsync(path);
+                        if (entropyResult.IsSuspicious)
+                        {
+                            threat.Score += entropyResult.ThreatScore / 4;
+
+                            if (entropyResult.IsPacked)
+                            {
+                                threat.MatchedPatterns.Add($"[ENTROPY] Packed ({entropyResult.PackerName ?? "Unknown"})");
+                            }
+
+                            if (entropyResult.OverallEntropy >= 7.5)
+                            {
+                                threat.MatchedPatterns.Add($"[ENTROPY] Very high entropy ({entropyResult.OverallEntropy:F2})");
+                            }
+                            else if (entropyResult.OverallEntropy >= 7.0)
+                            {
+                                threat.MatchedPatterns.Add($"[ENTROPY] High entropy ({entropyResult.OverallEntropy:F2})");
+                            }
+
+                            foreach (var indicator in entropyResult.Indicators.Take(2))
+                            {
+                                threat.MatchedPatterns.Add($"[ENTROPY] {indicator}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "Entropy analysis failed for {Path}", path);
+                    }
+                }
+
+                // 8. VirusTotal cloud lookup
+                if (EnableVirusTotalLookup && _virusTotalService != null && _virusTotalService.IsConfigured)
+                {
+                    try
+                    {
+                        var vtResult = await _virusTotalService.CheckFileAsync(path);
+                        if (vtResult != null)
+                        {
+                            if (vtResult.Malicious > 0)
+                            {
+                                // Weight based on detection rate
+                                int vtScore = vtResult.Malicious switch
+                                {
+                                    >= 20 => 50,
+                                    >= 10 => 40,
+                                    >= 5 => 30,
+                                    >= 2 => 20,
+                                    _ => 10
+                                };
+                                threat.Score += vtScore;
+                                threat.MatchedPatterns.Add($"[VT] {vtResult.Malicious}/{vtResult.TotalEngines} engines detected");
+                            }
+                            else if (vtResult.Suspicious > 0)
+                            {
+                                threat.Score += vtResult.Suspicious * 2;
+                                threat.MatchedPatterns.Add($"[VT] {vtResult.Suspicious} engines flagged as suspicious");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "VirusTotal lookup failed for {Path}", path);
+                    }
+                }
+            }
+            catch
+            {
+                // Continue with what we have
+            }
+
+            // Recalculate severity
+            threat.Score = Math.Min(threat.Score, 100);
+            threat.Severity = DetermineServerity(threat.Score);
+
+            if (threat.Severity == ThreatSeverity.Safe || threat.Score < MinimumScoreToReport)
+            {
+                return null;
+            }
+
+            threat.Description = GenerateDescription(threat.MatchedPatterns, threat.Severity);
+            return threat;
+        }
+
+        /// <summary>
+        /// Analyzes a running process for threats
+        /// </summary>
         public ThreatInfo? AnalyzeProcess(int processId, string processName, string? executablePath, List<string>? loadedDlls)
         {
             var score = 0;
@@ -233,7 +613,23 @@ namespace SkidrowKiller.Services
             var lowerName = processName.ToLower();
             var lowerPath = executablePath?.ToLower() ?? "";
 
-            // Check process name against patterns
+            // Check whitelist
+            if (!string.IsNullOrEmpty(executablePath) && _whitelistManager.IsWhitelisted(executablePath))
+            {
+                return null;
+            }
+
+            // 1. Check malware patterns first
+            foreach (var (pattern, patternScore) in _malwarePatterns)
+            {
+                if (lowerName.Contains(pattern))
+                {
+                    score += patternScore;
+                    matchedPatterns.Add($"[PROC-MAL] {pattern}");
+                }
+            }
+
+            // 2. Check process name against scene group patterns
             foreach (var (pattern, patternScore) in _highConfidencePatterns)
             {
                 if (lowerName.Contains(pattern))
@@ -243,7 +639,7 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Check executable path
+            // 3. Check executable path
             foreach (var (pattern, patternScore) in _highConfidencePatterns)
             {
                 if (lowerPath.Contains(pattern))
@@ -253,7 +649,7 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // Check loaded DLLs
+            // 4. Check loaded DLLs for suspicious modules
             if (loadedDlls != null)
             {
                 foreach (var dll in loadedDlls)
@@ -271,22 +667,39 @@ namespace SkidrowKiller.Services
                             }
                         }
                     }
+
+                    // Check for DLLs loaded from suspicious locations
+                    var lowerDllPath = dll.ToLower();
+                    if (lowerDllPath.Contains(@"\temp\") || lowerDllPath.Contains(@"\appdata\local\temp\"))
+                    {
+                        score += 25;
+                        matchedPatterns.Add($"[DLL-TEMP] {Path.GetFileName(dll)}");
+                    }
                 }
             }
 
-            if (score == 0 || matchedPatterns.Count == 0)
+            // 5. Check for suspicious process locations
+            if (!string.IsNullOrEmpty(executablePath))
+            {
+                if (lowerPath.Contains(@"\temp\") || lowerPath.Contains(@"\appdata\local\temp\"))
+                {
+                    score += 20;
+                    matchedPatterns.Add("[LOC] Running from temp directory");
+                }
+
+                if (lowerPath.Contains(@"\users\public\"))
+                {
+                    score += 15;
+                    matchedPatterns.Add("[LOC] Running from public directory");
+                }
+            }
+
+            if (score < MinimumScoreToReport || matchedPatterns.Count == 0)
             {
                 return null;
             }
 
-            var severity = score switch
-            {
-                >= 80 => ThreatSeverity.Critical,
-                >= 60 => ThreatSeverity.High,
-                >= 40 => ThreatSeverity.Medium,
-                >= 20 => ThreatSeverity.Low,
-                _ => ThreatSeverity.Safe
-            };
+            var severity = DetermineServerity(score);
 
             if (severity == ThreatSeverity.Safe)
             {
@@ -307,24 +720,152 @@ namespace SkidrowKiller.Services
             };
         }
 
+        /// <summary>
+        /// Deep process analysis including heuristics
+        /// </summary>
+        public async Task<ThreatInfo?> AnalyzeProcessDeepAsync(System.Diagnostics.Process process)
+        {
+            // Start with basic analysis
+            string? execPath = null;
+            List<string>? loadedDlls = null;
+
+            try { execPath = process.MainModule?.FileName; } catch { }
+            try
+            {
+                loadedDlls = process.Modules.Cast<System.Diagnostics.ProcessModule>()
+                    .Select(m => m.FileName)
+                    .Where(f => !string.IsNullOrEmpty(f))
+                    .ToList();
+            }
+            catch { }
+
+            var threat = AnalyzeProcess(process.Id, process.ProcessName, execPath, loadedDlls);
+
+            if (!EnableHeuristicAnalysis) return threat;
+
+            // Perform deep heuristic analysis
+            try
+            {
+                var heuristicResult = await _heuristicEngine.AnalyzeProcessAsync(process);
+
+                if (heuristicResult.Score > 20)
+                {
+                    threat ??= new ThreatInfo
+                    {
+                        Type = ThreatType.Process,
+                        Path = execPath ?? process.ProcessName,
+                        Name = process.ProcessName,
+                        ProcessId = process.Id,
+                        Score = 0,
+                        MatchedPatterns = new List<string>()
+                    };
+
+                    threat.Score += heuristicResult.Score / 2;
+
+                    foreach (var indicator in heuristicResult.SuspiciousIndicators.Take(5))
+                    {
+                        threat.MatchedPatterns.Add($"[HEUR] {indicator}");
+                    }
+
+                    foreach (var technique in heuristicResult.DetectedTechniques)
+                    {
+                        threat.MatchedPatterns.Add($"[TECH] {technique}");
+                    }
+
+                    threat.Score = Math.Min(threat.Score, 100);
+                    threat.Severity = DetermineServerity(threat.Score);
+                    threat.Description = GenerateDescription(threat.MatchedPatterns, threat.Severity);
+                }
+            }
+            catch { }
+
+            if (threat != null && threat.Severity == ThreatSeverity.Safe)
+            {
+                return null;
+            }
+
+            return threat;
+        }
+
+        /// <summary>
+        /// Scans registry for persistence threats
+        /// </summary>
+        public async Task<List<ThreatInfo>> ScanRegistryAsync()
+        {
+            var threats = new List<ThreatInfo>();
+
+            var registryThreats = await _heuristicEngine.ScanRegistryPersistenceAsync();
+
+            foreach (var regThreat in registryThreats)
+            {
+                if (regThreat.ThreatLevel >= ThreatSeverity.Low)
+                {
+                    threats.Add(new ThreatInfo
+                    {
+                        Type = ThreatType.Registry,
+                        Severity = regThreat.ThreatLevel,
+                        Path = regThreat.RegistryPath,
+                        Name = Path.GetFileName(regThreat.FilePath),
+                        Description = $"Suspicious persistence: {regThreat.Description}",
+                        Score = regThreat.Score,
+                        MatchedPatterns = regThreat.SuspiciousIndicators
+                    });
+                }
+            }
+
+            return threats;
+        }
+
+        private ThreatSeverity DetermineServerity(int score)
+        {
+            return score switch
+            {
+                >= 80 => ThreatSeverity.Critical,
+                >= 60 => ThreatSeverity.High,
+                >= 40 => ThreatSeverity.Medium,
+                >= 20 => ThreatSeverity.Low,
+                _ => ThreatSeverity.Safe
+            };
+        }
+
         private string GenerateDescription(List<string> patterns, ThreatSeverity severity)
         {
-            var patternList = string.Join(", ", patterns.Select(p =>
-                p.Replace("[HIGH] ", "")
-                 .Replace("[MED] ", "")
-                 .Replace("[DLL] ", "")
-                 .Replace("[EXT] ", "")
-                 .Replace("[DLL-LEGIT?] ", "")
-            ).Distinct());
+            var patternList = string.Join(", ", patterns
+                .Select(p => ExtractPatternName(p))
+                .Where(p => !string.IsNullOrEmpty(p))
+                .Distinct()
+                .Take(5));
 
             return severity switch
             {
-                ThreatSeverity.Critical => $"Critical threat detected! Matches: {patternList}",
-                ThreatSeverity.High => $"High risk item detected. Patterns: {patternList}",
+                ThreatSeverity.Critical => $"CRITICAL THREAT! Matches: {patternList}",
+                ThreatSeverity.High => $"High risk detected. Patterns: {patternList}",
                 ThreatSeverity.Medium => $"Suspicious item found. Contains: {patternList}",
                 ThreatSeverity.Low => $"Potentially unwanted. Contains: {patternList}",
                 _ => $"Safe. Contains: {patternList}"
             };
         }
+
+        private string ExtractPatternName(string pattern)
+        {
+            // Remove tags like [HIGH], [MED], etc.
+            var cleaned = System.Text.RegularExpressions.Regex.Replace(pattern, @"\[(.*?)\]\s*", "");
+            return cleaned.Trim();
+        }
+
+        /// <summary>
+        /// Gets the signature database for direct access
+        /// </summary>
+        public MalwareSignatureDatabase SignatureDatabase => _signatureDb;
+
+        /// <summary>
+        /// Gets the PE analyzer for direct access
+        /// </summary>
+        public PEAnalyzer PEAnalyzer => _peAnalyzer;
+
+        /// <summary>
+        /// Gets the heuristic engine for direct access
+        /// </summary>
+        public HeuristicEngine HeuristicEngine => _heuristicEngine;
     }
 }

@@ -667,7 +667,7 @@
         <Setter Property="CanContentScroll" Value="False"/>
         <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
         <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
-        <Setter Property="Focusable" Value="False"/>
+        <Setter Property="Focusable" Value="True"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollViewer">
@@ -697,6 +697,7 @@
                                    Margin="0,4,4,4"
                                    Minimum="0"
                                    Maximum="{TemplateBinding ScrollableHeight}"
+                                   Value="{TemplateBinding VerticalOffset}"
                                    ViewportSize="{TemplateBinding ViewportHeight}"
                                    Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"
                                    AutomationProperties.AutomationId="VerticalScrollBar">
@@ -757,6 +758,7 @@
                                    Margin="4,0,4,4"
                                    Minimum="0"
                                    Maximum="{TemplateBinding ScrollableWidth}"
+                                   Value="{TemplateBinding HorizontalOffset}"
                                    ViewportSize="{TemplateBinding ViewportWidth}"
                                    Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"
                                    AutomationProperties.AutomationId="HorizontalScrollBar">

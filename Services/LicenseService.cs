@@ -18,7 +18,7 @@ namespace SkidrowKiller.Services
     /// </summary>
     public class LicenseService
     {
-        private const string API_BASE_URL = "https://xmanstudio.com/api/v1/license";
+        private const string API_BASE_URL = "https://xman4289.com/api/v1/license";
         private const string PRODUCT_ID = "skidrow-killer";
         private const string LICENSE_FILE = "license.dat";
         private const string CONNECTIVITY_FILE = "connectivity.dat";
@@ -276,6 +276,59 @@ namespace SkidrowKiller.Services
             {
                 return null;
             }
+        }
+
+        #endregion
+
+        #region Device Registration
+
+        /// <summary>
+        /// Register device with server (called on startup)
+        /// Reports device info for analytics and license preparation
+        /// </summary>
+        public async Task<bool> RegisterDeviceAsync()
+        {
+            try
+            {
+                _logger.Information("Registering device with license server...");
+
+                var request = new DeviceRegistrationRequest
+                {
+                    DeviceId = GetDeviceId(),
+                    MachineId = GetMachineId(),
+                    MachineName = Environment.MachineName,
+                    OsVersion = Environment.OSVersion.ToString(),
+                    AppVersion = UpdateService.GetCurrentVersion(),
+                    ProductId = PRODUCT_ID
+                };
+
+                var response = await _httpClient.PostAsJsonAsync($"{API_BASE_URL}/device/register", request);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _lastSuccessfulConnection = DateTime.Now;
+                    SaveConnectivityData();
+                    _logger.Information("Device registered successfully");
+                    return true;
+                }
+
+                _logger.Warning("Device registration returned status: {Status}", response.StatusCode);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Device registration failed (server may be offline)");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Get purchase URL with pre-filled device ID
+        /// </summary>
+        public string GetPurchaseUrl()
+        {
+            var deviceId = GetDeviceId();
+            return $"https://xman4289.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
         }
 
         #endregion
@@ -607,6 +660,20 @@ namespace SkidrowKiller.Services
 
         #region Machine ID & Encryption
 
+        /// <summary>
+        /// Get formatted Device ID for display to user
+        /// </summary>
+        public string GetDeviceId()
+        {
+            var machineId = GetMachineId();
+            // Format as XXXX-XXXX-XXXX-XXXX for readability
+            if (machineId.Length >= 16)
+            {
+                return $"{machineId[..4]}-{machineId[4..8]}-{machineId[8..12]}-{machineId[12..16]}".ToUpper();
+            }
+            return machineId.ToUpper();
+        }
+
         private string GetMachineId()
         {
             try
@@ -821,6 +888,27 @@ namespace SkidrowKiller.Services
     {
         [JsonPropertyName("machine_id")]
         public string MachineId { get; set; } = string.Empty;
+
+        [JsonPropertyName("product_id")]
+        public string ProductId { get; set; } = string.Empty;
+    }
+
+    public class DeviceRegistrationRequest
+    {
+        [JsonPropertyName("device_id")]
+        public string DeviceId { get; set; } = string.Empty;
+
+        [JsonPropertyName("machine_id")]
+        public string MachineId { get; set; } = string.Empty;
+
+        [JsonPropertyName("machine_name")]
+        public string MachineName { get; set; } = string.Empty;
+
+        [JsonPropertyName("os_version")]
+        public string OsVersion { get; set; } = string.Empty;
+
+        [JsonPropertyName("app_version")]
+        public string AppVersion { get; set; } = string.Empty;
 
         [JsonPropertyName("product_id")]
         public string ProductId { get; set; } = string.Empty;

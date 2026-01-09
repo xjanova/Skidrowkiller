@@ -19,6 +19,9 @@ namespace SkidrowKiller.Views
 
             _licenseService.LicenseStatusChanged += LicenseService_StatusChanged;
 
+            // Display Device ID
+            DeviceIdTextBlock.Text = _licenseService.GetDeviceId();
+
             UpdateUI();
         }
 
@@ -263,15 +266,52 @@ namespace SkidrowKiller.Views
 
         private void PurchaseLink_Click(object sender, MouseButtonEventArgs e)
         {
+            OpenPurchasePage();
+        }
+
+        private void OpenPurchasePage()
+        {
             try
             {
+                var purchaseUrl = _licenseService.GetPurchaseUrl();
                 Process.Start(new ProcessStartInfo
                 {
-                    FileName = "https://xmanstudio.com/products/skidrow-killer",
+                    FileName = purchaseUrl,
                     UseShellExecute = true
                 });
             }
             catch { }
+        }
+
+        private void BuyLicense_Click(object sender, RoutedEventArgs e)
+        {
+            OpenPurchasePage();
+        }
+
+        private void CopyDeviceId_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Clipboard.SetText(DeviceIdTextBlock.Text);
+                CopyDeviceIdButton.Content = "Copied!";
+
+                // Reset button text after 2 seconds
+                var timer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromSeconds(2)
+                };
+                timer.Tick += (s, args) =>
+                {
+                    timer.Stop();
+                    CopyDeviceIdButton.Content = "Copy";
+                };
+                timer.Start();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to copy: {ex.Message}", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void ShowActivationMessage(string message, bool success)

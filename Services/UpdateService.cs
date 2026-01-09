@@ -48,10 +48,19 @@ namespace SkidrowKiller.Services
         /// </summary>
         public static string GetCurrentVersion()
         {
-            return Assembly.GetExecutingAssembly()
+            var version = Assembly.GetExecutingAssembly()
                 .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion
                 ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
                 ?? AppConfiguration.Settings.Application.Version;
+
+            // Remove source revision suffix (e.g., "3.1.0+abc123..." -> "3.1.0")
+            var plusIndex = version.IndexOf('+');
+            if (plusIndex > 0)
+            {
+                version = version[..plusIndex];
+            }
+
+            return version;
         }
 
         /// <summary>

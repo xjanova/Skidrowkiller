@@ -12,17 +12,48 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-            <TextBlock Text="🔍 Smart Scan"
-                       Style="{StaticResource HeaderTextStyle}"
-                       Margin="0,0,0,8"/>
-            <TextBlock Text="Intelligent malware detection with scoring system to reduce false positives"
-                       Style="{StaticResource BodyTextStyle}"/>
-        </StackPanel>
+        <!-- Header with Scan Buttons -->
+        <Grid Grid.Row="0" Margin="0,0,0,24">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock Text="🔍 Smart Scan"
+                           Style="{StaticResource HeaderTextStyle}"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="Intelligent malware detection with scoring system to reduce false positives"
+                           Style="{StaticResource BodyTextStyle}"/>
+            </StackPanel>
+
+            <!-- Scan Buttons (Top Right) -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="StartButton"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Content="🔍 Start Scan"
+                        Width="140"
+                        Click="StartButton_Click"/>
+
+                <Button x:Name="PauseButton"
+                        Style="{StaticResource SuccessButtonStyle}"
+                        Content="⏸️ Pause"
+                        Width="100"
+                        Margin="8,0,0,0"
+                        IsEnabled="False"
+                        Click="PauseButton_Click"/>
+
+                <Button x:Name="StopButton"
+                        Style="{StaticResource DangerButtonStyle}"
+                        Content="⏹️ Stop"
+                        Width="100"
+                        Margin="8,0,0,0"
+                        IsEnabled="False"
+                        Click="StopButton_Click"/>
+            </StackPanel>
+        </Grid>
 
         <!-- Scan Options -->
         <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
@@ -121,6 +152,81 @@
                                   Grid.Column="2"/>
                     </Grid>
 
+                    <Separator Margin="0,12" Background="{StaticResource BorderBrush}"/>
+
+                    <!-- Specific Folder Selection -->
+                    <TextBlock Text="Scan Specific Folders (Optional)"
+                               Style="{StaticResource SubHeaderTextStyle}"
+                               Margin="0,0,0,8"/>
+                    <TextBlock Text="Add folders to scan only those locations instead of entire drives"
+                               Style="{StaticResource BodyTextStyle}"
+                               Opacity="0.7" Margin="0,0,0,12"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Selected Folders List -->
+                        <Border Grid.Column="0" Background="{StaticResource BgTertiaryBrush}"
+                                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                CornerRadius="6" Padding="8" MinHeight="60" MaxHeight="100">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                <ItemsControl x:Name="CustomFoldersList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="{Binding}" Grid.Column="0"
+                                                           Style="{StaticResource BodyTextStyle}"
+                                                           FontSize="11" TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip="{Binding}"/>
+                                                <Button Grid.Column="1" Content="✕"
+                                                        Style="{StaticResource NavButtonStyle}"
+                                                        FontSize="10" Padding="4,2"
+                                                        Margin="4,0,0,0"
+                                                        Tag="{Binding}"
+                                                        Click="RemoveCustomFolder_Click"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Border>
+
+                        <!-- Add Folder Button -->
+                        <Button x:Name="AddFolderButton" Grid.Column="1"
+                                Style="{StaticResource SecondaryButtonStyle}"
+                                Margin="8,0,0,0" Padding="12,8"
+                                VerticalAlignment="Top"
+                                Click="AddCustomFolder_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="📁" Margin="0,0,6,0"/>
+                                <TextBlock Text="Add Folder"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Clear All Button -->
+                        <Button x:Name="ClearFoldersButton" Grid.Column="2"
+                                Style="{StaticResource NavButtonStyle}"
+                                Margin="8,0,0,0" Padding="12,8"
+                                VerticalAlignment="Top"
+                                Click="ClearCustomFolders_Click"
+                                Content="Clear All"/>
+                    </Grid>
+
+                    <TextBlock x:Name="FolderHintText"
+                               Text="💡 No folders added - will scan selected drives"
+                               Style="{StaticResource BodyTextStyle}"
+                               FontSize="11" Opacity="0.6"
+                               Margin="0,8,0,0"/>
+
                     <Separator Margin="0,16" Background="{StaticResource BorderBrush}"/>
                 </StackPanel>
 
@@ -139,154 +245,97 @@
             </StackPanel>
         </Border>
 
-        <!-- Progress -->
-        <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
-            <StackPanel>
-                <!-- Header with Status and Stats -->
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
+        <!-- Compact Progress Bar -->
+        <Border Grid.Row="2" Background="{StaticResource BgSecondaryBrush}" CornerRadius="8" Padding="12,8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-                    <StackPanel Grid.Column="0">
-                        <TextBlock x:Name="StatusLabel"
-                                   Text="Ready to scan"
-                                   Style="{StaticResource SubHeaderTextStyle}"
-                                   Foreground="{StaticResource CyanPrimaryBrush}"/>
-                        <TextBlock x:Name="CurrentItemLabel"
-                                   Text=""
-                                   Style="{StaticResource BodyTextStyle}"
-                                   TextTrimming="CharacterEllipsis"
-                                   MaxWidth="600"
-                                   Margin="0,4,0,0"/>
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <TextBlock x:Name="ScannedCountLabel"
-                                   Text="0"
-                                   FontSize="24"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource CyanPrimaryBrush}"/>
-                        <TextBlock Text=" scanned"
-                                   Style="{StaticResource BodyTextStyle}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="4,0,24,4"/>
-
-                        <TextBlock x:Name="FoundCountLabel"
-                                   Text="0"
-                                   FontSize="24"
-                                   FontWeight="Bold"
-                                   Foreground="{StaticResource DangerBrush}"/>
-                        <TextBlock Text=" threats"
-                                   Style="{StaticResource BodyTextStyle}"
-                                   VerticalAlignment="Bottom"
-                                   Margin="4,0,0,4"/>
-                    </StackPanel>
-                </Grid>
-
-                <!-- Section Progress (Current Phase) -->
-                <Grid Margin="0,20,0,0">
+                <!-- Row 1: Progress info -->
+                <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
+                    <!-- Status with Thinking Animation -->
                     <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="{StaticResource CyanPrimaryBrush}"
-                                CornerRadius="4"
-                                Padding="8,4">
-                            <TextBlock x:Name="SectionLabel"
-                                       Text="Ready"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource BgPrimaryBrush}"/>
+                        <!-- Thinking/Spinning Animation -->
+                        <Grid x:Name="ThinkingIndicator" Width="20" Height="20" Margin="0,0,8,0" Visibility="Collapsed">
+                            <Ellipse Width="20" Height="20" StrokeThickness="2" Stroke="{StaticResource BgTertiaryBrush}"/>
+                            <Ellipse x:Name="SpinningArc" Width="20" Height="20" StrokeThickness="2" RenderTransformOrigin="0.5,0.5">
+                                <Ellipse.Stroke>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="{StaticResource CyanPrimaryColor}" Offset="0"/>
+                                        <GradientStop Color="Transparent" Offset="0.75"/>
+                                    </LinearGradientBrush>
+                                </Ellipse.Stroke>
+                                <Ellipse.RenderTransform>
+                                    <RotateTransform x:Name="SpinningRotation" Angle="0"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </Grid>
+
+                        <!-- Section Badge -->
+                        <Border x:Name="SectionBadge" Background="{StaticResource CyanPrimaryBrush}" CornerRadius="4" Padding="6,2">
+                            <TextBlock x:Name="SectionLabel" Text="Ready" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource BgPrimaryBrush}"/>
                         </Border>
-                        <TextBlock x:Name="SectionIndexLabel"
-                                   Text=""
-                                   Style="{StaticResource BodyTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Margin="8,0,0,0"/>
+                        <TextBlock x:Name="SectionIndexLabel" Text="" Style="{StaticResource BodyTextStyle}" FontSize="11" VerticalAlignment="Center" Margin="6,0,0,0"/>
+
+                        <!-- Pre-scan status text -->
+                        <TextBlock x:Name="PreScanStatusLabel" Text="" Style="{StaticResource BodyTextStyle}" FontSize="11"
+                                   Foreground="{StaticResource CyanPrimaryBrush}" FontStyle="Italic" VerticalAlignment="Center" Margin="8,0,0,0" Visibility="Collapsed"/>
                     </StackPanel>
 
-                    <Border Grid.Column="1"
-                            Background="{StaticResource BgTertiaryBrush}"
-                            CornerRadius="6"
-                            Height="12"
-                            Margin="16,0">
-                        <Border x:Name="SectionProgressFill"
-                                Background="{StaticResource CyanGradientBrush}"
-                                CornerRadius="6"
-                                HorizontalAlignment="Left"
-                                Width="0"/>
-                    </Border>
+                    <!-- Combined Progress Bars -->
+                    <Grid Grid.Column="1" Margin="12,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Column="2"
-                               x:Name="SectionPercentLabel"
-                               Text="0%"
-                               Style="{StaticResource BodyTextStyle}"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource CyanPrimaryBrush}"
-                               Width="50"
-                               TextAlignment="Right"/>
-                </Grid>
-
-                <!-- Total Progress -->
-                <Grid Margin="0,12,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="{StaticResource SuccessBrush}"
-                                CornerRadius="4"
-                                Padding="8,4">
-                            <TextBlock Text="TOTAL"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource BgPrimaryBrush}"/>
+                        <!-- Section Progress (slim) -->
+                        <Border Grid.Row="0" Background="{StaticResource BgTertiaryBrush}" CornerRadius="3" Height="6" Margin="0,0,0,2">
+                            <Border x:Name="SectionProgressFill" Background="{StaticResource CyanGradientBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
                         </Border>
-                        <TextBlock x:Name="TotalItemsLabel"
-                                   Text=""
-                                   Style="{StaticResource BodyTextStyle}"
-                                   VerticalAlignment="Center"
-                                   Margin="8,0,0,0"/>
+
+                        <!-- Total Progress (slim) -->
+                        <Border Grid.Row="1" Background="{StaticResource BgTertiaryBrush}" CornerRadius="3" Height="6" Margin="0,2,0,0">
+                            <Border x:Name="TotalProgressFill" Background="{StaticResource SuccessGradientBrush}" CornerRadius="3" HorizontalAlignment="Left" Width="0"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Percentages -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,16,0">
+                        <TextBlock x:Name="SectionPercentLabel" Text="0%" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource CyanPrimaryBrush}" Width="35" TextAlignment="Right"/>
+                        <TextBlock Text="/" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}" Margin="2,0"/>
+                        <TextBlock x:Name="TotalPercentLabel" Text="0%" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource SuccessBrush}" Width="35" TextAlignment="Left"/>
                     </StackPanel>
 
-                    <Border Grid.Column="1"
-                            Background="{StaticResource BgTertiaryBrush}"
-                            CornerRadius="6"
-                            Height="12"
-                            Margin="16,0">
-                        <Border x:Name="TotalProgressFill"
-                                Background="{StaticResource SuccessGradientBrush}"
-                                CornerRadius="6"
-                                HorizontalAlignment="Left"
-                                Width="0"/>
-                    </Border>
-
-                    <TextBlock Grid.Column="2"
-                               x:Name="TotalPercentLabel"
-                               Text="0%"
-                               Style="{StaticResource BodyTextStyle}"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource SuccessBrush}"
-                               Width="50"
-                               TextAlignment="Right"/>
+                    <!-- Stats -->
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock x:Name="ScannedCountLabel" Text="0" FontSize="14" FontWeight="Bold" Foreground="{StaticResource CyanPrimaryBrush}"/>
+                        <TextBlock Text=" items" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="2,0,12,1"/>
+                        <TextBlock x:Name="FoundCountLabel" Text="0" FontSize="14" FontWeight="Bold" Foreground="{StaticResource DangerBrush}"/>
+                        <TextBlock Text=" threats" FontSize="11" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Bottom" Margin="2,0,0,1"/>
+                    </StackPanel>
                 </Grid>
 
-                <!-- Pre-scan status -->
-                <TextBlock x:Name="PreScanStatusLabel"
-                           Text=""
-                           Style="{StaticResource BodyTextStyle}"
+                <!-- Row 2: Current scanning path -->
+                <TextBlock Grid.Row="1" x:Name="CurrentItemLabel" Text=""
+                           Style="{StaticResource BodyTextStyle}" FontSize="10"
                            Foreground="{StaticResource TextTertiaryBrush}"
-                           FontStyle="Italic"
-                           Margin="0,12,0,0"
-                           Visibility="Collapsed"/>
-            </StackPanel>
+                           TextTrimming="CharacterEllipsis"
+                           Margin="0,6,0,0"/>
+
+                <!-- Hidden elements for compatibility -->
+                <TextBlock x:Name="StatusLabel" Text="Ready to scan" Visibility="Collapsed"/>
+                <TextBlock x:Name="TotalItemsLabel" Text="" Visibility="Collapsed"/>
+            </Grid>
         </Border>
 
         <!-- Log -->
@@ -310,29 +359,5 @@
             </Grid>
         </Border>
 
-        <!-- Action Buttons -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
-            <Button x:Name="StartButton"
-                    Style="{StaticResource PrimaryButtonStyle}"
-                    Content="🔍 Start Scan"
-                    Width="150"
-                    Click="StartButton_Click"/>
-
-            <Button x:Name="PauseButton"
-                    Style="{StaticResource SuccessButtonStyle}"
-                    Content="⏸️ Pause"
-                    Width="120"
-                    Margin="16,0,0,0"
-                    IsEnabled="False"
-                    Click="PauseButton_Click"/>
-
-            <Button x:Name="StopButton"
-                    Style="{StaticResource DangerButtonStyle}"
-                    Content="⏹️ Stop"
-                    Width="120"
-                    Margin="16,0,0,0"
-                    IsEnabled="False"
-                    Click="StopButton_Click"/>
-        </StackPanel>
     </Grid>
 </Page>

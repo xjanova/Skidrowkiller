@@ -1,0 +1,140 @@
+<Window x:Class="SkidrowKiller.Views.ThreatConfirmDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Confirm Action"
+        Width="500" Height="340"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="{StaticResource BgPrimaryBrush}"
+        WindowStyle="None"
+        AllowsTransparency="True">
+
+    <Border Background="{StaticResource BgPrimaryBrush}"
+            BorderBrush="{StaticResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="12">
+        <Grid Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+                <Path Width="24" Height="24" Stretch="Uniform" Fill="{StaticResource WarningBrush}"
+                      Data="M13,14H11V10H13M13,18H11V16H13M1,21H23L12,2L1,21Z"/>
+                <TextBlock Text="Uncertain Threat Detected"
+                           Style="{StaticResource SubHeaderTextStyle}"
+                           Foreground="{StaticResource WarningBrush}"
+                           VerticalAlignment="Center"
+                           Margin="12,0,0,0"/>
+                <TextBlock x:Name="CountLabel"
+                           Style="{StaticResource BodyTextStyle}"
+                           Foreground="{StaticResource TextTertiaryBrush}"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0"/>
+            </StackPanel>
+
+            <!-- Threat Info -->
+            <Border Grid.Row="1" Background="{StaticResource BgSecondaryBrush}"
+                    CornerRadius="8" Padding="12" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="80"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Score:"
+                               Style="{StaticResource BodyTextStyle}" Opacity="0.7"/>
+                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal">
+                        <TextBlock x:Name="ScoreLabel" Text="75"
+                                   FontWeight="Bold" Foreground="{StaticResource WarningBrush}"/>
+                        <TextBlock Text="/100" Style="{StaticResource BodyTextStyle}" Opacity="0.5"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Path:"
+                               Style="{StaticResource BodyTextStyle}" Opacity="0.7" Margin="0,8,0,0"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" x:Name="PathLabel"
+                               Text="C:\path\to\file.exe"
+                               Style="{StaticResource BodyTextStyle}"
+                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                               Margin="0,8,0,0"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Patterns:"
+                               Style="{StaticResource BodyTextStyle}" Opacity="0.7" Margin="0,8,0,0"/>
+                    <TextBlock Grid.Row="2" Grid.Column="1" x:Name="PatternsLabel"
+                               Text="crack, keygen"
+                               Style="{StaticResource BodyTextStyle}"
+                               TextWrapping="Wrap"
+                               Margin="0,8,0,0"/>
+
+                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Severity:"
+                               Style="{StaticResource BodyTextStyle}" Opacity="0.7" Margin="0,8,0,0"/>
+                    <TextBlock Grid.Row="3" Grid.Column="1" x:Name="SeverityLabel"
+                               Text="Medium"
+                               Style="{StaticResource BodyTextStyle}"
+                               Foreground="{StaticResource WarningBrush}"
+                               Margin="0,8,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- Question -->
+            <TextBlock Grid.Row="2" Text="What do you want to do with this threat?"
+                       Style="{StaticResource BodyTextStyle}"
+                       HorizontalAlignment="Center"
+                       Margin="0,0,0,16"/>
+
+            <!-- Buttons -->
+            <Grid Grid.Row="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Remove -->
+                <Button Grid.Column="0" Content="Remove"
+                        Style="{StaticResource DangerButtonStyle}"
+                        Padding="8,10" Margin="0,0,4,0"
+                        Click="Remove_Click"/>
+
+                <!-- Remove All -->
+                <Button Grid.Column="1" Content="Remove All"
+                        Style="{StaticResource DangerButtonStyle}"
+                        Padding="8,10" Margin="4,0"
+                        Click="RemoveAll_Click"
+                        ToolTip="Remove this and all remaining uncertain threats"/>
+
+                <!-- Skip -->
+                <Button Grid.Column="2" Content="Skip"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Padding="8,10" Margin="4,0"
+                        Click="Skip_Click"/>
+
+                <!-- Skip All -->
+                <Button Grid.Column="3" Content="Skip All"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Padding="8,10" Margin="4,0"
+                        Click="SkipAll_Click"
+                        ToolTip="Skip this and all remaining uncertain threats"/>
+
+                <!-- Whitelist -->
+                <Button Grid.Column="4" Content="Whitelist"
+                        Style="{StaticResource SuccessButtonStyle}"
+                        Padding="8,10" Margin="4,0,0,0"
+                        Click="Whitelist_Click"
+                        ToolTip="Add to whitelist (mark as safe)"/>
+            </Grid>
+        </Grid>
+    </Border>
+</Window>

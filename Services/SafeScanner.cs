@@ -43,6 +43,7 @@ namespace SkidrowKiller.Services
         // Scan mode parameters
         private Views.ScanMode _currentScanMode = Views.ScanMode.Quick;
         private List<string> _selectedDrives = new();
+        private List<string> _customFolders = new();
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
@@ -66,7 +67,7 @@ namespace SkidrowKiller.Services
         }
 
         public async Task<ScanResult> ScanAsync(bool scanFiles, bool scanRegistry, bool scanProcesses,
-            Views.ScanMode scanMode = Views.ScanMode.Quick, List<string>? selectedDrives = null)
+            Views.ScanMode scanMode = Views.ScanMode.Quick, List<string>? selectedDrives = null, List<string>? customFolders = null)
         {
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
@@ -76,6 +77,7 @@ namespace SkidrowKiller.Services
             // Store scan parameters
             _currentScanMode = scanMode;
             _selectedDrives = selectedDrives ?? new List<string>();
+            _customFolders = customFolders ?? new List<string>();
 
             try
             {
@@ -99,7 +101,19 @@ namespace SkidrowKiller.Services
                     RaiseLog("   Mode: Deep - Full system scan");
                 }
 
-                if (_selectedDrives.Any())
+                if (_customFolders.Any())
+                {
+                    RaiseLog($"   Target: {_customFolders.Count} specific folder(s)");
+                    foreach (var folder in _customFolders.Take(5))
+                    {
+                        RaiseLog($"      📁 {folder}");
+                    }
+                    if (_customFolders.Count > 5)
+                    {
+                        RaiseLog($"      ... and {_customFolders.Count - 5} more");
+                    }
+                }
+                else if (_selectedDrives.Any())
                 {
                     RaiseLog($"   Drives: {string.Join(", ", _selectedDrives)}");
                 }
@@ -185,31 +199,46 @@ namespace SkidrowKiller.Services
                 PreScanStatusChanged?.Invoke(this, "Counting files...");
                 await Task.Run(() =>
                 {
-                    var drivesToScan = GetDrivesToScan();
-
-                    if (_currentScanMode == Views.ScanMode.Quick)
+                    // If custom folders specified, use those instead of drives
+                    if (_customFolders.Any())
                     {
-                        // Quick scan: only count common malware locations
-                        foreach (var drive in drivesToScan)
+                        foreach (var folder in _customFolders)
                         {
                             if (token.IsCancellationRequested) break;
-                            foreach (var path in GetQuickScanPaths(drive))
+                            if (Directory.Exists(folder))
                             {
-                                if (token.IsCancellationRequested) break;
-                                if (Directory.Exists(path))
-                                {
-                                    CountFilesInDirectory(path, token, maxDepth: 3);
-                                }
+                                CountFilesInDirectory(folder, token);
                             }
                         }
                     }
                     else
                     {
-                        // Deep/Custom scan: count all files
-                        foreach (var drive in drivesToScan)
+                        var drivesToScan = GetDrivesToScan();
+
+                        if (_currentScanMode == Views.ScanMode.Quick)
                         {
-                            if (token.IsCancellationRequested) break;
-                            CountFilesInDirectory(drive, token);
+                            // Quick scan: only count common malware locations
+                            foreach (var drive in drivesToScan)
+                            {
+                                if (token.IsCancellationRequested) break;
+                                foreach (var path in GetQuickScanPaths(drive))
+                                {
+                                    if (token.IsCancellationRequested) break;
+                                    if (Directory.Exists(path))
+                                    {
+                                        CountFilesInDirectory(path, token, maxDepth: 3);
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // Deep/Custom scan: count all files
+                            foreach (var drive in drivesToScan)
+                            {
+                                if (token.IsCancellationRequested) break;
+                                CountFilesInDirectory(drive, token);
+                            }
                         }
                     }
                 }, token);
@@ -357,6 +386,26 @@ namespace SkidrowKiller.Services
 
         private async Task ScanFilesAsync(ScanResult result, CancellationToken token)
         {
+            // If custom folders specified, use those instead of drives
+            if (_customFolders.Any())
+            {
+                RaiseLog($"   Scanning {_customFolders.Count} specified folder(s)...");
+                foreach (var folder in _customFolders)
+                {
+                    if (token.IsCancellationRequested) break;
+                    if (Directory.Exists(folder))
+                    {
+                        RaiseLog($"   📁 {folder}");
+                        await Task.Run(() => ScanDirectory(folder, result, token), token);
+                    }
+                    else
+                    {
+                        RaiseLog($"   ⚠️ Folder not found: {folder}");
+                    }
+                }
+                return;
+            }
+
             var drivesToScan = GetDrivesToScan();
 
             if (_currentScanMode == Views.ScanMode.Quick)

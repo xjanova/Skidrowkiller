@@ -1,7 +1,12 @@
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
+using System.Windows.Media.Animation;
+using System.Windows.Threading;
+using Microsoft.Win32;
 using SkidrowKiller.Models;
 using SkidrowKiller.Services;
 
@@ -14,8 +19,11 @@ namespace SkidrowKiller.Views
         private readonly BackupManager _backup;
         private readonly List<ThreatInfo> _foundThreats = new();
         private readonly List<DriveSelection> _drives = new();
+        private readonly List<string> _customFolders = new();
         private double _sectionProgressWidth;
         private double _totalProgressWidth;
+        private DispatcherTimer? _spinTimer;
+        private double _currentAngle = 0;
 
         public ScanView(SafeScanner scanner, WhitelistManager whitelist, BackupManager backup)
         {
@@ -38,11 +46,39 @@ namespace SkidrowKiller.Views
             {
                 UpdateProgressBarWidths();
                 UpdateScanModeDescription();
+                InitializeSpinAnimation();
             };
             SizeChanged += (s, e) =>
             {
                 UpdateProgressBarWidths();
             };
+        }
+
+        private void InitializeSpinAnimation()
+        {
+            _spinTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(16) // ~60fps
+            };
+            _spinTimer.Tick += (s, e) =>
+            {
+                _currentAngle = (_currentAngle + 6) % 360;
+                SpinningRotation.Angle = _currentAngle;
+            };
+        }
+
+        private void StartThinkingAnimation()
+        {
+            ThinkingIndicator.Visibility = Visibility.Visible;
+            PreScanStatusLabel.Visibility = Visibility.Visible;
+            _spinTimer?.Start();
+        }
+
+        private void StopThinkingAnimation()
+        {
+            ThinkingIndicator.Visibility = Visibility.Collapsed;
+            PreScanStatusLabel.Visibility = Visibility.Collapsed;
+            _spinTimer?.Stop();
         }
 
         private void LoadDrives()
@@ -128,7 +164,137 @@ namespace SkidrowKiller.Views
             // Refresh drive list
             DrivesList.ItemsSource = null;
             DrivesList.ItemsSource = _drives;
+
+            // Update folder hint
+            UpdateFolderHint();
         }
+
+        #region Custom Folder Selection
+
+        private void AddCustomFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var folderPath = ShowFolderBrowserDialog("Select a folder to scan");
+
+            if (!string.IsNullOrEmpty(folderPath))
+            {
+                // Check if already added
+                if (!_customFolders.Contains(folderPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    _customFolders.Add(folderPath);
+                    RefreshCustomFoldersList();
+                    UpdateFolderHint();
+                }
+                else
+                {
+                    MessageBox.Show("This folder is already in the list.", "Info",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Shows a folder browser dialog using Shell32 COM interface
+        /// </summary>
+        private string? ShowFolderBrowserDialog(string title)
+        {
+            var openFileDialog = new OpenFileDialog
+            {
+                Title = title,
+                CheckFileExists = false,
+                CheckPathExists = true,
+                FileName = "Select Folder",
+                Filter = "Folders|\n",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyComputer)
+            };
+
+            // Use OpenFolderDialog if available (Windows 10+)
+            try
+            {
+                var dialog = new OpenFolderDialog
+                {
+                    Title = title,
+                    Multiselect = false
+                };
+
+                if (dialog.ShowDialog() == true)
+                {
+                    return dialog.FolderName;
+                }
+            }
+            catch
+            {
+                // Fallback: use a workaround with file dialog
+                var ofd = new OpenFileDialog
+                {
+                    Title = title,
+                    ValidateNames = false,
+                    CheckFileExists = false,
+                    CheckPathExists = true,
+                    FileName = "Folder Selection"
+                };
+
+                if (ofd.ShowDialog() == true)
+                {
+                    var path = Path.GetDirectoryName(ofd.FileName);
+                    if (Directory.Exists(path))
+                        return path;
+                }
+            }
+
+            return null;
+        }
+
+        private void RemoveCustomFolder_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.Tag is string folderPath)
+            {
+                _customFolders.Remove(folderPath);
+                RefreshCustomFoldersList();
+                UpdateFolderHint();
+            }
+        }
+
+        private void ClearCustomFolders_Click(object sender, RoutedEventArgs e)
+        {
+            if (_customFolders.Count == 0) return;
+
+            var result = MessageBox.Show("Clear all selected folders?", "Confirm",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                _customFolders.Clear();
+                RefreshCustomFoldersList();
+                UpdateFolderHint();
+            }
+        }
+
+        private void RefreshCustomFoldersList()
+        {
+            CustomFoldersList.ItemsSource = null;
+            CustomFoldersList.ItemsSource = _customFolders.ToList();
+        }
+
+        private void UpdateFolderHint()
+        {
+            if (FolderHintText == null) return;
+
+            if (_customFolders.Count == 0)
+            {
+                FolderHintText.Text = "💡 No folders added - will scan selected drives";
+            }
+            else
+            {
+                FolderHintText.Text = $"✅ {_customFolders.Count} folder(s) selected - will scan these instead of drives";
+            }
+        }
+
+        private List<string> GetCustomFolders()
+        {
+            return _customFolders.ToList();
+        }
+
+        #endregion
 
         private ScanMode GetCurrentScanMode()
         {
@@ -157,6 +323,7 @@ namespace SkidrowKiller.Views
         {
             var scanMode = GetCurrentScanMode();
             var selectedDrives = GetSelectedDrives();
+            var customFolders = GetCustomFolders();
 
             // Validate custom mode
             if (scanMode == ScanMode.Custom)
@@ -170,9 +337,10 @@ namespace SkidrowKiller.Views
                     return;
                 }
 
-                if (!selectedDrives.Any() && ScanFilesCheck.IsChecked == true)
+                // For file scan, need either drives or custom folders
+                if (ScanFilesCheck.IsChecked == true && !selectedDrives.Any() && !customFolders.Any())
                 {
-                    MessageBox.Show("Please select at least one drive to scan.", "Warning",
+                    MessageBox.Show("Please select at least one drive or add specific folders to scan.", "Warning",
                         MessageBoxButton.OK, MessageBoxImage.Warning);
                     return;
                 }
@@ -185,10 +353,25 @@ namespace SkidrowKiller.Views
                 _ => "Custom Scan"
             };
 
+            // Build target description
+            string targetDescription;
+            if (scanMode == ScanMode.Quick)
+            {
+                targetDescription = "System Drive";
+            }
+            else if (customFolders.Any())
+            {
+                targetDescription = $"{customFolders.Count} specific folder(s)";
+            }
+            else
+            {
+                targetDescription = string.Join(", ", selectedDrives.Select(Path.GetPathRoot));
+            }
+
             var result = MessageBox.Show(
                 $"Start {modeDescription}?\n\n" +
                 $"Mode: {modeDescription}\n" +
-                $"Drives: {(scanMode == ScanMode.Quick ? "System Drive" : string.Join(", ", selectedDrives.Select(Path.GetPathRoot)))}\n\n" +
+                $"Target: {targetDescription}\n\n" +
                 "• Items with score < 80 will require confirmation\n" +
                 "• Backups are created before removal\n" +
                 "• You can whitelist false positives\n\n" +
@@ -205,7 +388,7 @@ namespace SkidrowKiller.Views
             ScannedCountLabel.Text = "0";
             FoundCountLabel.Text = "0";
 
-            // Reset progress bars
+            // Reset progress bars and show thinking animation
             SectionLabel.Text = "Preparing";
             SectionIndexLabel.Text = "";
             SectionPercentLabel.Text = "0%";
@@ -213,8 +396,8 @@ namespace SkidrowKiller.Views
             TotalItemsLabel.Text = "";
             TotalPercentLabel.Text = "0%";
             TotalProgressFill.Width = 0;
-            PreScanStatusLabel.Visibility = Visibility.Visible;
-            PreScanStatusLabel.Text = "Counting items...";
+            PreScanStatusLabel.Text = "Analyzing targets...";
+            StartThinkingAnimation();
 
             // Update buttons
             StartButton.IsEnabled = false;
@@ -258,8 +441,8 @@ namespace SkidrowKiller.Views
                 scanProcesses = ScanProcessesCheck.IsChecked == true;
             }
 
-            // Start scan with mode and drives
-            await _scanner.ScanAsync(scanFiles, scanRegistry, scanProcesses, scanMode, selectedDrives);
+            // Start scan with mode, drives, and custom folders
+            await _scanner.ScanAsync(scanFiles, scanRegistry, scanProcesses, scanMode, selectedDrives, customFolders);
         }
 
         private void PauseButton_Click(object sender, RoutedEventArgs e)
@@ -304,6 +487,11 @@ namespace SkidrowKiller.Views
             Dispatcher.Invoke(() =>
             {
                 PreScanStatusLabel.Text = status;
+                // Keep animation running during pre-scan
+                if (!string.IsNullOrEmpty(status) && ThinkingIndicator.Visibility != Visibility.Visible)
+                {
+                    StartThinkingAnimation();
+                }
             });
         }
 
@@ -311,14 +499,13 @@ namespace SkidrowKiller.Views
         {
             Dispatcher.Invoke(() =>
             {
+                // Stop thinking animation once actual scanning starts
+                StopThinkingAnimation();
+
                 // Update counters
                 ScannedCountLabel.Text = e.ScannedCount.ToString("N0");
                 FoundCountLabel.Text = e.FoundCount.ToString();
                 CurrentItemLabel.Text = e.CurrentItem;
-
-                // Hide pre-scan status once scanning starts
-                PreScanStatusLabel.Visibility = Visibility.Collapsed;
-                StatusLabel.Text = "Scanning...";
 
                 // Update section progress
                 SectionLabel.Text = e.CurrentSection;
@@ -330,8 +517,8 @@ namespace SkidrowKiller.Views
                 UpdateProgressBarWidths();
                 SectionProgressFill.Width = (_sectionProgressWidth * sectionPercent / 100);
 
-                // Update total progress
-                TotalItemsLabel.Text = $"{e.ScannedCount:N0} / {e.TotalItems:N0}";
+                // Update total items info
+                TotalItemsLabel.Text = $"({e.ScannedCount:N0}/{e.TotalItems:N0})";
                 var totalPercent = Math.Min(e.TotalPercent, 100);
                 TotalPercentLabel.Text = $"{totalPercent:F0}%";
 
@@ -406,32 +593,63 @@ namespace SkidrowKiller.Views
             // Confirm uncertain threats
             if (confirmNeeded.Any() && ConfirmDeleteCheck.IsChecked == true)
             {
-                foreach (var threat in confirmNeeded)
+                bool removeAll = false;
+                bool skipAll = false;
+
+                for (int i = 0; i < confirmNeeded.Count; i++)
                 {
+                    var threat = confirmNeeded[i];
                     if (_whitelist.IsWhitelisted(threat.Path)) continue;
 
-                    var result = MessageBox.Show(
-                        $"Uncertain threat detected (Score: {threat.Score}/100):\n\n" +
-                        $"Path: {threat.Path}\n" +
-                        $"Patterns: {string.Join(", ", threat.MatchedPatterns)}\n" +
-                        $"Severity: {threat.SeverityDisplay}\n\n" +
-                        "What do you want to do?",
-                        "Confirm Action",
-                        MessageBoxButton.YesNoCancel,
-                        MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
+                    // Handle bulk actions
+                    if (removeAll)
                     {
                         await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
                         LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                        continue;
                     }
-                    else if (result == MessageBoxResult.No)
+                    if (skipAll)
                     {
-                        // Add to whitelist
-                        _whitelist.AddToWhitelist(threat.Path, "User confirmed as safe");
-                        LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Whitelisted: {threat.Path}\n");
+                        LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⏭️ Skipped: {threat.Path}\n");
+                        continue;
                     }
-                    // Cancel = skip
+
+                    // Show confirmation dialog
+                    var dialog = new ThreatConfirmDialog(threat, i, confirmNeeded.Count)
+                    {
+                        Owner = Window.GetWindow(this)
+                    };
+
+                    if (dialog.ShowDialog() == true)
+                    {
+                        switch (dialog.SelectedAction)
+                        {
+                            case ThreatAction.Remove:
+                                await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
+                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                                break;
+
+                            case ThreatAction.RemoveAll:
+                                removeAll = true;
+                                await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
+                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                                break;
+
+                            case ThreatAction.Skip:
+                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⏭️ Skipped: {threat.Path}\n");
+                                break;
+
+                            case ThreatAction.SkipAll:
+                                skipAll = true;
+                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⏭️ Skipped: {threat.Path}\n");
+                                break;
+
+                            case ThreatAction.Whitelist:
+                                _whitelist.AddToWhitelist(threat.Path, "User confirmed as safe");
+                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Whitelisted: {threat.Path}\n");
+                                break;
+                        }
+                    }
                 }
             }
 
@@ -441,6 +659,9 @@ namespace SkidrowKiller.Views
 
         private void ResetUI()
         {
+            // Stop any running animations
+            StopThinkingAnimation();
+
             StartButton.IsEnabled = true;
             PauseButton.IsEnabled = false;
             StopButton.IsEnabled = false;
@@ -452,7 +673,6 @@ namespace SkidrowKiller.Views
             ScanRegistryCheck.IsEnabled = true;
             ScanProcessesCheck.IsEnabled = true;
             CurrentItemLabel.Text = "";
-            PreScanStatusLabel.Visibility = Visibility.Collapsed;
 
             // Re-enable drives based on current mode
             UpdateScanModeUI();
