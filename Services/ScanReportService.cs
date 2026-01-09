@@ -410,7 +410,7 @@ namespace SkidrowKiller.Services
         public int ThreatsQuarantined { get; set; }
         public List<ThreatInfo> Threats { get; set; } = new();
         public List<string> ScannedPaths { get; set; } = new();
-        public string AppVersion { get; set; } = "3.3.0";
+        public string AppVersion { get; set; } = UpdateService.GetCurrentVersion();
     }
 
     public enum ReportFormat

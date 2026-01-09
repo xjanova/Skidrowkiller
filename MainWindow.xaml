@@ -62,7 +62,7 @@
                                    FontWeight="Bold"
                                    Foreground="{StaticResource AccentPrimaryBrush}"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Text=" v3.2.0"
+                        <TextBlock x:Name="VersionText" Text=""
                                    FontSize="10"
                                    Foreground="{StaticResource TextTertiaryBrush}"
                                    VerticalAlignment="Center"
@@ -173,6 +173,20 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Path Data="{StaticResource NetworkIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="18" Height="18" Stretch="Uniform" Margin="0,0,12,0"/>
                                         <TextBlock Text="Web Protection" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="NavBrowser" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Browser">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🌐" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Browser Protection" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="NavCleanup" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Cleanup">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🧹" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="System Cleanup" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
 

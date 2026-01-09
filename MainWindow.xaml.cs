@@ -22,6 +22,11 @@ namespace SkidrowKiller
         private readonly LicenseService _licenseService;
         private readonly NetworkProtectionService _networkProtection;
         private readonly SelfProtectionService _selfProtection;
+        private readonly GamingModeService _gamingMode;
+        private readonly UsbScanService _usbScan;
+        private readonly RansomwareProtectionService _ransomwareProtection;
+        private readonly ScheduledScanService _scheduledScan;
+        private readonly BrowserProtectionService _browserProtection;
         private readonly ILogger _logger;
 
         private Button? _activeNavButton;
@@ -34,6 +39,8 @@ namespace SkidrowKiller
         private SettingsView? _settingsView;
         private LicenseView? _licenseView;
         private NetworkProtectionView? _networkProtectionView;
+        private BrowserProtectionView? _browserProtectionView;
+        private SystemCleanupView? _systemCleanupView;
         private bool _disposed;
 
         public MainWindow()
@@ -55,6 +62,11 @@ namespace SkidrowKiller
                 _licenseService = new LicenseService();
                 _networkProtection = new NetworkProtectionService(_analyzer);
                 _selfProtection = new SelfProtectionService();
+                _gamingMode = new GamingModeService(_protection);
+                _usbScan = new UsbScanService(_scanner, _analyzer);
+                _ransomwareProtection = new RansomwareProtectionService();
+                _scheduledScan = new ScheduledScanService(_scanner);
+                _browserProtection = new BrowserProtectionService();
 
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
@@ -72,6 +84,8 @@ namespace SkidrowKiller
                 _settingsView = new SettingsView();
                 _licenseView = new LicenseView(_licenseService);
                 _networkProtectionView = new NetworkProtectionView(_networkProtection, _analyzer);
+                _browserProtectionView = new BrowserProtectionView(_browserProtection);
+                _systemCleanupView = new SystemCleanupView();
 
                 // Update license badge
                 UpdateLicenseBadge();
@@ -91,8 +105,13 @@ namespace SkidrowKiller
                 // Initialize and enable self-protection
                 _ = InitializeSelfProtectionAsync();
 
+                // Start new services based on user settings
+                _ = InitializeNewServicesAsync();
+
                 // Update title with version
-                Title = $"Skidrow Killer v{UpdateService.GetCurrentVersion()}";
+                var version = UpdateService.GetCurrentVersion();
+                Title = $"Skidrow Killer v{version}";
+                VersionText.Text = $" v{version}";
 
                 _logger.Information("MainWindow initialized successfully");
             }
@@ -163,6 +182,13 @@ namespace SkidrowKiller
                     MainFrame.Navigate(_networkProtectionView);
                     _networkProtectionView?.RefreshUI();
                     break;
+                case "Browser":
+                    MainFrame.Navigate(_browserProtectionView);
+                    _browserProtectionView?.RefreshBrowserList();
+                    break;
+                case "Cleanup":
+                    MainFrame.Navigate(_systemCleanupView);
+                    break;
                 case "Threats":
                     MainFrame.Navigate(_threatsView);
                     _threatsView?.RefreshThreats();
@@ -206,6 +232,61 @@ namespace SkidrowKiller
             catch (Exception ex)
             {
                 _logger.Warning(ex, "Self-protection initialization warning");
+            }
+        }
+
+        private async Task InitializeNewServicesAsync()
+        {
+            try
+            {
+                // Load user settings
+                var settingsPath = System.IO.Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "SkidrowKiller", "user_settings.json");
+
+                Views.UserSettings? settings = null;
+                if (System.IO.File.Exists(settingsPath))
+                {
+                    var json = await System.IO.File.ReadAllTextAsync(settingsPath);
+                    settings = System.Text.Json.JsonSerializer.Deserialize<Views.UserSettings>(json);
+                }
+                settings ??= new Views.UserSettings();
+
+                // Start Gaming Mode if enabled
+                if (settings.GamingModeEnabled)
+                {
+                    _gamingMode.AutoDetectEnabled = settings.AutoDetectGames;
+                    _gamingMode.SuppressNotifications = settings.SuppressGamingNotifications;
+                    _gamingMode.Start();
+                    _logger.Information("Gaming Mode service started");
+                }
+
+                // Start USB Scan if enabled
+                if (settings.AutoScanUsb)
+                {
+                    _usbScan.AutoScanEnabled = settings.AutoScanUsb;
+                    _usbScan.BlockAutorun = settings.BlockAutorun;
+                    _usbScan.Start();
+                    _logger.Information("USB Auto-Scan service started");
+                }
+
+                // Start Ransomware Protection if enabled
+                if (settings.RansomwareProtection)
+                {
+                    _ransomwareProtection.Start();
+                    _logger.Information("Ransomware Protection service started");
+                }
+
+                // Start Scheduled Scans if enabled
+                if (settings.ScheduledScansEnabled)
+                {
+                    _scheduledScan.Start();
+                    _logger.Information("Scheduled Scan service started");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Warning(ex, "Error initializing new services");
             }
         }
 
@@ -330,12 +411,21 @@ namespace SkidrowKiller
                 // Dispose network protection
                 _networkProtection?.Dispose();
 
+                // Dispose browser protection
+                _browserProtection?.Dispose();
+
                 // Dispose self-protection
                 if (_selfProtection != null)
                 {
                     _selfProtection.TamperAttemptDetected -= SelfProtection_TamperAttemptDetected;
                     _selfProtection.Dispose();
                 }
+
+                // Dispose new services
+                _gamingMode?.Dispose();
+                _usbScan?.Dispose();
+                _ransomwareProtection?.Dispose();
+                _scheduledScan?.Dispose();
 
                 // Dispose scanner if it implements IDisposable
                 (_scanner as IDisposable)?.Dispose();
