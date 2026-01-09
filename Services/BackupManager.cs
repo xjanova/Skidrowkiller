@@ -1,6 +1,5 @@
 using System.IO;
 using System.IO.Compression;
-using System.Text.Json;
 using Microsoft.Win32;
 
 namespace SkidrowKiller.Services
@@ -18,28 +17,28 @@ namespace SkidrowKiller.Services
         public string? RegistryValue { get; set; }
         public object? RegistryData { get; set; }
         public RegistryValueKind? RegistryKind { get; set; }
+        public bool IsRestored { get; set; }
     }
 
     public class BackupManager
     {
         private readonly string _backupFolder;
-        private readonly string _manifestPath;
-        private List<BackupEntry> _backups = new();
+        private readonly SettingsDatabase? _db;
         private readonly object _lock = new();
 
         public event EventHandler<string>? LogAdded;
 
-        public BackupManager()
+        public BackupManager(SettingsDatabase? db = null)
         {
+            _db = db;
+
             _backupFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "SkidrowKiller",
                 "Backups"
             );
-            _manifestPath = Path.Combine(_backupFolder, "manifest.json");
 
             EnsureBackupFolder();
-            LoadManifest();
         }
 
         private void EnsureBackupFolder()
@@ -47,38 +46,6 @@ namespace SkidrowKiller.Services
             if (!Directory.Exists(_backupFolder))
             {
                 Directory.CreateDirectory(_backupFolder);
-            }
-        }
-
-        private void LoadManifest()
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    if (File.Exists(_manifestPath))
-                    {
-                        var json = File.ReadAllText(_manifestPath);
-                        _backups = JsonSerializer.Deserialize<List<BackupEntry>>(json) ?? new();
-                    }
-                }
-                catch
-                {
-                    _backups = new();
-                }
-            }
-        }
-
-        private void SaveManifest()
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    var json = JsonSerializer.Serialize(_backups, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(_manifestPath, json);
-                }
-                catch { }
             }
         }
 
@@ -103,8 +70,8 @@ namespace SkidrowKiller.Services
 
                     File.Copy(filePath, entry.BackupPath, true);
 
-                    _backups.Add(entry);
-                    SaveManifest();
+                    // Save to database
+                    _db?.AddBackupEntry(entry);
 
                     RaiseLog($"[BACKUP] Backed up: {filePath}");
                     return entry.Id;
@@ -143,8 +110,8 @@ namespace SkidrowKiller.Services
                     // Create zip backup
                     ZipFile.CreateFromDirectory(directoryPath, entry.BackupPath, CompressionLevel.Fastest, true);
 
-                    _backups.Add(entry);
-                    SaveManifest();
+                    // Save to database
+                    _db?.AddBackupEntry(entry);
 
                     RaiseLog($"[BACKUP] Backed up directory: {directoryPath}");
                     return entry.Id;
@@ -180,8 +147,8 @@ namespace SkidrowKiller.Services
                         RegistryKind = kind
                     };
 
-                    _backups.Add(entry);
-                    SaveManifest();
+                    // Save to database
+                    _db?.AddBackupEntry(entry);
 
                     RaiseLog($"[BACKUP] Backed up registry: {entry.RegistryKey}\\{valueName}");
                     return entry.Id;
@@ -198,7 +165,8 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                var entry = _backups.FirstOrDefault(b => b.Id == backupId);
+                var backups = GetBackups();
+                var entry = backups.FirstOrDefault(b => b.Id == backupId);
                 if (entry == null) return false;
 
                 try
@@ -230,9 +198,8 @@ namespace SkidrowKiller.Services
                             catch { }
                         }
 
-                        // Remove from list and save
-                        _backups.Remove(entry);
-                        SaveManifest();
+                        // Mark as restored in database
+                        _db?.MarkBackupRestored(backupId);
                         RaiseLog($"[BACKUP] Removed backup entry after successful restore: {entry.Name}");
                     }
 
@@ -314,7 +281,8 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                var entry = _backups.FirstOrDefault(b => b.Id == backupId);
+                var backups = GetBackups();
+                var entry = backups.FirstOrDefault(b => b.Id == backupId);
                 if (entry == null) return;
 
                 try
@@ -324,8 +292,8 @@ namespace SkidrowKiller.Services
                         File.Delete(entry.BackupPath);
                     }
 
-                    _backups.Remove(entry);
-                    SaveManifest();
+                    // Mark as restored (deleted) in database
+                    _db?.MarkBackupRestored(backupId);
                 }
                 catch { }
             }
@@ -335,7 +303,11 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                return _backups.OrderByDescending(b => b.BackedUpAt).ToList();
+                if (_db == null) return new List<BackupEntry>();
+
+                return _db.GetBackupEntries()
+                    .OrderByDescending(b => b.BackedUpAt)
+                    .ToList();
             }
         }
 
@@ -343,7 +315,7 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                return _backups.Sum(b => b.Size);
+                return GetBackups().Sum(b => b.Size);
             }
         }
 
@@ -352,7 +324,7 @@ namespace SkidrowKiller.Services
             lock (_lock)
             {
                 var cutoff = DateTime.Now.AddDays(-keepDays);
-                var oldBackups = _backups.Where(b => b.BackedUpAt < cutoff).ToList();
+                var oldBackups = GetBackups().Where(b => b.BackedUpAt < cutoff).ToList();
 
                 foreach (var backup in oldBackups)
                 {

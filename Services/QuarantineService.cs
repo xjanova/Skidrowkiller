@@ -3,7 +3,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using SkidrowKiller.Models;
 using Serilog;
 
@@ -16,9 +15,8 @@ namespace SkidrowKiller.Services
     public class QuarantineService
     {
         private readonly string _quarantinePath;
-        private readonly string _manifestPath;
+        private readonly SettingsDatabase? _db;
         private readonly ILogger _logger;
-        private List<QuarantineEntry> _entries;
         private readonly object _lock = new();
 
         // Encryption key derived from machine-specific data
@@ -28,9 +26,10 @@ namespace SkidrowKiller.Services
         public event EventHandler<QuarantineEntry>? ItemQuarantined;
         public event EventHandler<QuarantineEntry>? ItemRestored;
 
-        public QuarantineService()
+        public QuarantineService(SettingsDatabase? db = null)
         {
             _logger = LoggingService.ForContext<QuarantineService>();
+            _db = db;
 
             _quarantinePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -38,11 +37,7 @@ namespace SkidrowKiller.Services
                 "Quarantine"
             );
 
-            _manifestPath = Path.Combine(_quarantinePath, "manifest.json");
-            _entries = new List<QuarantineEntry>();
-
             EnsureDirectoryExists();
-            LoadManifest();
         }
 
         private void EnsureDirectoryExists()
@@ -51,37 +46,6 @@ namespace SkidrowKiller.Services
             {
                 Directory.CreateDirectory(_quarantinePath);
                 _logger.Information("Created quarantine directory: {Path}", _quarantinePath);
-            }
-        }
-
-        private void LoadManifest()
-        {
-            try
-            {
-                if (File.Exists(_manifestPath))
-                {
-                    var json = File.ReadAllText(_manifestPath);
-                    _entries = JsonSerializer.Deserialize<List<QuarantineEntry>>(json) ?? new List<QuarantineEntry>();
-                    _logger.Information("Loaded {Count} quarantine entries", _entries.Count);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to load quarantine manifest");
-                _entries = new List<QuarantineEntry>();
-            }
-        }
-
-        private void SaveManifest()
-        {
-            try
-            {
-                var json = JsonSerializer.Serialize(_entries, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_manifestPath, json);
-            }
-            catch (Exception ex)
-            {
-                _logger.Error(ex, "Failed to save quarantine manifest");
             }
         }
 
@@ -104,9 +68,23 @@ namespace SkidrowKiller.Services
                     }
 
                     var fileInfo = new FileInfo(filePath);
+                    var fileHash = ComputeFileHash(filePath);
+                    var entryId = Guid.NewGuid().ToString();
+
+                    // Create quarantine file path
+                    var quarantineFilePath = Path.Combine(_quarantinePath, $"{entryId}.qtn");
+
+                    // Read, encrypt, and save the file
+                    var fileContent = File.ReadAllBytes(filePath);
+                    var encryptedContent = EncryptData(fileContent);
+                    File.WriteAllBytes(quarantineFilePath, encryptedContent);
+
+                    // Delete original file
+                    File.Delete(filePath);
+
                     var entry = new QuarantineEntry
                     {
-                        Id = Guid.NewGuid().ToString(),
+                        Id = entryId,
                         OriginalPath = filePath,
                         FileName = fileInfo.Name,
                         FileSize = fileInfo.Length,
@@ -114,25 +92,15 @@ namespace SkidrowKiller.Services
                         ThreatName = threatInfo?.Name ?? "Unknown Threat",
                         ThreatScore = threatInfo?.Score ?? 0,
                         Severity = threatInfo?.Severity.ToString() ?? "Unknown",
-                        FileHash = ComputeFileHash(filePath)
+                        QuarantineFilePath = quarantineFilePath,
+                        FileHash = fileHash
                     };
 
-                    // Create quarantine file path
-                    var quarantineFilePath = Path.Combine(_quarantinePath, $"{entry.Id}.qtn");
-
-                    // Read, encrypt, and save the file
-                    var fileContent = File.ReadAllBytes(filePath);
-                    var encryptedContent = EncryptData(fileContent);
-                    File.WriteAllBytes(quarantineFilePath, encryptedContent);
-
-                    entry.QuarantineFilePath = quarantineFilePath;
-
-                    // Delete original file
-                    File.Delete(filePath);
-
-                    // Add to manifest
-                    _entries.Add(entry);
-                    SaveManifest();
+                    // Save to database
+                    if (_db != null)
+                    {
+                        _db.AddQuarantineEntry(entry);
+                    }
 
                     var message = $"Quarantined: {fileInfo.Name}";
                     RaiseLog(message);
@@ -186,21 +154,9 @@ namespace SkidrowKiller.Services
                     }
 
                     var dirInfo = new DirectoryInfo(directoryPath);
-                    var entry = new QuarantineEntry
-                    {
-                        Id = Guid.NewGuid().ToString(),
-                        OriginalPath = directoryPath,
-                        FileName = dirInfo.Name,
-                        FileSize = GetDirectorySize(dirInfo),
-                        QuarantinedAt = DateTime.Now,
-                        ThreatName = threatInfo?.Name ?? "Unknown Threat",
-                        ThreatScore = threatInfo?.Score ?? 0,
-                        Severity = threatInfo?.Severity.ToString() ?? "Unknown",
-                        IsDirectory = true
-                    };
-
-                    var quarantineFilePath = Path.Combine(_quarantinePath, $"{entry.Id}.qtn");
-                    var tempZipPath = Path.Combine(Path.GetTempPath(), $"{entry.Id}.zip");
+                    var entryId = Guid.NewGuid().ToString();
+                    var quarantineFilePath = Path.Combine(_quarantinePath, $"{entryId}.qtn");
+                    var tempZipPath = Path.Combine(Path.GetTempPath(), $"{entryId}.zip");
 
                     try
                     {
@@ -212,15 +168,31 @@ namespace SkidrowKiller.Services
                         var encryptedContent = EncryptData(zipContent);
                         File.WriteAllBytes(quarantineFilePath, encryptedContent);
 
-                        entry.QuarantineFilePath = quarantineFilePath;
-                        entry.FileHash = ComputeFileHash(tempZipPath);
+                        var fileHash = ComputeFileHash(tempZipPath);
 
                         // Delete original directory
                         Directory.Delete(directoryPath, true);
 
-                        // Add to manifest
-                        _entries.Add(entry);
-                        SaveManifest();
+                        var entry = new QuarantineEntry
+                        {
+                            Id = entryId,
+                            OriginalPath = directoryPath,
+                            FileName = dirInfo.Name,
+                            FileSize = GetDirectorySize(dirInfo),
+                            QuarantinedAt = DateTime.Now,
+                            ThreatName = threatInfo?.Name ?? "Unknown Threat",
+                            ThreatScore = threatInfo?.Score ?? 0,
+                            Severity = threatInfo?.Severity.ToString() ?? "Unknown",
+                            IsDirectory = true,
+                            QuarantineFilePath = quarantineFilePath,
+                            FileHash = fileHash
+                        };
+
+                        // Save to database
+                        if (_db != null)
+                        {
+                            _db.AddQuarantineEntry(entry);
+                        }
 
                         var message = $"Quarantined directory: {dirInfo.Name}";
                         RaiseLog(message);
@@ -262,7 +234,8 @@ namespace SkidrowKiller.Services
             {
                 try
                 {
-                    var entry = _entries.FirstOrDefault(e => e.Id == entryId);
+                    var entries = GetAllEntries();
+                    var entry = entries.FirstOrDefault(e => e.Id == entryId);
                     if (entry == null)
                     {
                         return new QuarantineResult
@@ -316,9 +289,8 @@ namespace SkidrowKiller.Services
                     // Clean up quarantine file
                     File.Delete(entry.QuarantineFilePath);
 
-                    // Remove from manifest
-                    _entries.Remove(entry);
-                    SaveManifest();
+                    // Mark as restored in database
+                    _db?.MarkQuarantineRestored(entry.Id);
 
                     var message = $"Restored: {entry.FileName} to {entry.OriginalPath}";
                     RaiseLog(message);
@@ -353,7 +325,8 @@ namespace SkidrowKiller.Services
             {
                 try
                 {
-                    var entry = _entries.FirstOrDefault(e => e.Id == entryId);
+                    var entries = GetAllEntries();
+                    var entry = entries.FirstOrDefault(e => e.Id == entryId);
                     if (entry == null)
                     {
                         return new QuarantineResult
@@ -368,8 +341,8 @@ namespace SkidrowKiller.Services
                         File.Delete(entry.QuarantineFilePath);
                     }
 
-                    _entries.Remove(entry);
-                    SaveManifest();
+                    // Mark as deleted in database
+                    _db?.MarkQuarantineDeleted(entry.Id);
 
                     var message = $"Permanently deleted: {entry.FileName}";
                     RaiseLog(message);
@@ -400,7 +373,9 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                return _entries.AsReadOnly();
+                if (_db == null) return new List<QuarantineEntry>().AsReadOnly();
+
+                return _db.GetQuarantineEntries().AsReadOnly();
             }
         }
 
@@ -430,7 +405,9 @@ namespace SkidrowKiller.Services
             lock (_lock)
             {
                 var cutoffDate = DateTime.Now.AddDays(-retentionDays);
-                var oldEntries = _entries.Where(e => e.QuarantinedAt < cutoffDate).ToList();
+                var entries = GetAllEntries();
+                var oldEntries = entries.Where(e => e.QuarantinedAt < cutoffDate).ToList();
+                var deletedCount = 0;
 
                 foreach (var entry in oldEntries)
                 {
@@ -440,7 +417,8 @@ namespace SkidrowKiller.Services
                         {
                             File.Delete(entry.QuarantineFilePath);
                         }
-                        _entries.Remove(entry);
+                        _db?.MarkQuarantineDeleted(entry.Id);
+                        deletedCount++;
                     }
                     catch (Exception ex)
                     {
@@ -448,13 +426,12 @@ namespace SkidrowKiller.Services
                     }
                 }
 
-                if (oldEntries.Count > 0)
+                if (deletedCount > 0)
                 {
-                    SaveManifest();
-                    _logger.Information("Cleaned up {Count} old quarantine entries", oldEntries.Count);
+                    _logger.Information("Cleaned up {Count} old quarantine entries", deletedCount);
                 }
 
-                return oldEntries.Count;
+                return deletedCount;
             }
         }
 

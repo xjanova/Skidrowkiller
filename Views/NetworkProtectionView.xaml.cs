@@ -13,6 +13,7 @@ namespace SkidrowKiller.Views
     {
         private readonly NetworkProtectionService _networkProtection;
         private readonly ThreatAnalyzer _analyzer;
+        private readonly QuarantineService? _quarantine;
         private CancellationTokenSource? _animationCts;
         private CancellationTokenSource? _statsCts;
         private bool _isDisposed;
@@ -24,11 +25,12 @@ namespace SkidrowKiller.Views
         private int _crackBlocked;
         private int _torrentBlocked;
 
-        public NetworkProtectionView(NetworkProtectionService networkProtection, ThreatAnalyzer analyzer)
+        public NetworkProtectionView(NetworkProtectionService networkProtection, ThreatAnalyzer analyzer, QuarantineService? quarantine = null)
         {
             InitializeComponent();
             _networkProtection = networkProtection;
             _analyzer = analyzer;
+            _quarantine = quarantine;
 
             BlockedConnectionsList.ItemsSource = BlockedConnections;
 
@@ -516,10 +518,36 @@ namespace SkidrowKiller.Views
                     if (result == System.Windows.MessageBoxResult.Yes)
                     {
                         RaiseLog("Quarantining malicious files...");
-                        // TODO: Integrate with QuarantineService
+                        var quarantined = 0;
                         foreach (var file in deepScanResult.MaliciousFiles)
                         {
-                            RaiseLog($"  Quarantined: {file.FileName}");
+                            if (_quarantine != null)
+                            {
+                                var threatInfo = new Models.ThreatInfo
+                                {
+                                    Name = file.ThreatName,
+                                    Path = file.FilePath,
+                                    Severity = Models.ThreatSeverity.High
+                                };
+                                var qResult = _quarantine.QuarantineFile(file.FilePath, threatInfo);
+                                if (qResult.Success)
+                                {
+                                    quarantined++;
+                                    RaiseLog($"  Quarantined: {file.FileName}");
+                                }
+                                else
+                                {
+                                    RaiseLog($"  Failed to quarantine: {file.FileName} - {qResult.Message}");
+                                }
+                            }
+                            else
+                            {
+                                RaiseLog($"  Detected: {file.FileName} (quarantine not available)");
+                            }
+                        }
+                        if (quarantined > 0)
+                        {
+                            RaiseLog($"Successfully quarantined {quarantined} malicious files");
                         }
                     }
                 }

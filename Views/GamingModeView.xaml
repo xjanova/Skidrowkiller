@@ -1,0 +1,225 @@
+<Page x:Class="SkidrowKiller.Views.GamingModeView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="Transparent">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Gaming Mode" FontSize="28" FontWeight="Bold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <Border x:Name="StatusBadge" CornerRadius="4" Padding="8,4" Margin="12,0,0,0"
+                        VerticalAlignment="Center" Background="{StaticResource TextTertiaryBrush}">
+                    <TextBlock x:Name="StatusText" Text="Inactive" FontSize="11" FontWeight="SemiBold" Foreground="White"/>
+                </Border>
+            </StackPanel>
+            <TextBlock Text="Optimize performance while gaming by reducing scan intensity and suppressing notifications"
+                       FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Gaming Status Card -->
+        <Border Grid.Row="1" CornerRadius="12" Padding="24" Margin="0,0,0,20">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#1e4976" Offset="0"/>
+                    <GradientStop Color="#132f4c" Offset="0.5"/>
+                    <GradientStop Color="#0d2137" Offset="1"/>
+                </LinearGradientBrush>
+            </Border.Background>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Gaming Icon -->
+                <Border Grid.Column="0" Width="80" Height="80" CornerRadius="40" Margin="0,0,24,0">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop x:Name="IconGradient1" Color="#6366f1" Offset="0"/>
+                            <GradientStop x:Name="IconGradient2" Color="#8b5cf6" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <TextBlock x:Name="GamingIcon" Text="🎮" FontSize="36"
+                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+
+                <!-- Status Info -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock x:Name="TxtGamingStatus" Text="Gaming Mode Inactive"
+                               FontSize="22" FontWeight="Bold" Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="TxtCurrentGame" Text="No game detected"
+                               FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+                    <TextBlock x:Name="TxtDuration" Text=""
+                               FontSize="12" Foreground="{StaticResource TextTertiaryBrush}" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <!-- Manual Toggle Button -->
+                <Button x:Name="BtnToggleGaming" Grid.Column="2"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Click="BtnToggleGaming_Click"
+                        Width="140" Height="50"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="BtnToggleIcon" Text="▶" FontSize="14" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="BtnToggleText" Text="Activate" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Stats Row -->
+        <Grid Grid.Row="2" Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Sessions Today -->
+            <Border Grid.Column="0" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,8,0">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="Sessions" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtSessionCount" Text="0" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Today" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Total Gaming Time -->
+            <Border Grid.Column="1" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="4,0">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="Gaming Time" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtTotalTime" Text="0:00" FontSize="28" FontWeight="Bold"
+                               Foreground="{StaticResource SuccessBrush}" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+                    <TextBlock Text="Hours Today" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Protection Status -->
+            <Border Grid.Column="2" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="8,0,0,0">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="Protection" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtProtectionStatus" Text="Active" FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource SuccessBrush}" Margin="0,4,0,0" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtProtectionDetail" Text="Full Intensity" FontSize="11"
+                               Foreground="{StaticResource TextTertiaryBrush}" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Settings -->
+        <Border Grid.Row="3" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="20">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="Gaming Mode Settings" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,16"/>
+
+                <StackPanel Grid.Row="1">
+                    <!-- Auto-Detect -->
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Auto-Detect Games" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Automatically activate when games or fullscreen apps are detected"
+                                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkAutoDetect" Grid.Column="1" IsChecked="True"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkAutoDetect_Changed" Unchecked="ChkAutoDetect_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Suppress Notifications -->
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Suppress Notifications" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Don't show threat notifications during gaming sessions"
+                                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkSuppressNotifications" Grid.Column="1" IsChecked="True"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkSuppressNotifications_Changed" Unchecked="ChkSuppressNotifications_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Reduce Scan Intensity -->
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Reduce Scan Intensity" FontSize="14" FontWeight="SemiBold"
+                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                <TextBlock Text="Lower CPU usage by reducing real-time monitoring frequency"
+                                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkReduceIntensity" Grid.Column="1" IsChecked="True"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkReduceIntensity_Changed" Unchecked="ChkReduceIntensity_Changed"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Pause Protection (Advanced) -->
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Pause Protection" FontSize="14" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <Border Background="{StaticResource WarningBrush}" CornerRadius="4"
+                                            Padding="6,2" Margin="8,0,0,0">
+                                        <TextBlock Text="Advanced" FontSize="9" Foreground="White"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="Completely pause real-time protection during gaming (not recommended)"
+                                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                            <CheckBox x:Name="ChkPauseProtection" Grid.Column="1" IsChecked="False"
+                                      VerticalAlignment="Center"
+                                      Checked="ChkPauseProtection_Changed" Unchecked="ChkPauseProtection_Changed"/>
+                        </Grid>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Footer Actions -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="BtnStartMonitor" Content="Start Monitor"
+                    Style="{StaticResource SecondaryButtonStyle}"
+                    Click="BtnStartMonitor_Click" Width="140"/>
+        </StackPanel>
+    </Grid>
+</Page>

@@ -16,6 +16,7 @@ namespace SkidrowKiller.Services
     public class ScheduledScanService : IDisposable
     {
         private readonly SafeScanner _scanner;
+        private readonly SettingsDatabase? _db;
         private readonly string _configPath;
         private CancellationTokenSource? _cts;
         private List<ScanSchedule> _schedules = new();
@@ -30,9 +31,10 @@ namespace SkidrowKiller.Services
         public IReadOnlyList<ScanSchedule> Schedules => _schedules.AsReadOnly();
         public ScanSchedule? NextSchedule => GetNextSchedule();
 
-        public ScheduledScanService(SafeScanner scanner)
+        public ScheduledScanService(SafeScanner scanner, SettingsDatabase? db = null)
         {
             _scanner = scanner;
+            _db = db;
             _configPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "SkidrowKiller",
@@ -287,10 +289,27 @@ namespace SkidrowKiller.Services
         {
             try
             {
-                if (File.Exists(_configPath))
+                // First try to load from SQLite database
+                if (_db != null)
+                {
+                    var dbSchedules = _db.GetScheduledScans();
+                    if (dbSchedules.Count > 0)
+                    {
+                        _schedules = dbSchedules;
+                    }
+                }
+
+                // Fallback/migrate from JSON config
+                if (_schedules.Count == 0 && File.Exists(_configPath))
                 {
                     var json = File.ReadAllText(_configPath);
                     _schedules = JsonSerializer.Deserialize<List<ScanSchedule>>(json) ?? new();
+
+                    // Migrate to SQLite
+                    foreach (var schedule in _schedules)
+                    {
+                        _db?.SaveScheduledScan(schedule);
+                    }
                 }
             }
             catch
@@ -301,7 +320,7 @@ namespace SkidrowKiller.Services
             // Add default schedule if none exist
             if (_schedules.Count == 0)
             {
-                _schedules.Add(new ScanSchedule
+                var defaultSchedule = new ScanSchedule
                 {
                     Id = Guid.NewGuid().ToString(),
                     Name = "Daily Quick Scan",
@@ -310,7 +329,8 @@ namespace SkidrowKiller.Services
                     Hour = 12,
                     Minute = 0,
                     IsEnabled = false // Disabled by default
-                });
+                };
+                _schedules.Add(defaultSchedule);
                 SaveSchedules();
             }
         }
@@ -327,6 +347,12 @@ namespace SkidrowKiller.Services
 
                 var json = JsonSerializer.Serialize(_schedules, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(_configPath, json);
+
+                // Also save to SQLite
+                foreach (var schedule in _schedules)
+                {
+                    _db?.SaveScheduledScan(schedule);
+                }
             }
             catch { }
         }

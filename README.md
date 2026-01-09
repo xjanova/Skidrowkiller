@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.2.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.6.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg" alt="Platform">
   <img src="https://img.shields.io/badge/.NET-8.0-purple.svg" alt=".NET">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
@@ -81,7 +81,7 @@ Skidrow Killer protects itself from malware attacks:
 | **Registry Protection** | Detect attempts to disable the scanner via registry |
 | **Process Protection** | Prevent malware from terminating the scanner |
 
-### Anti-Evasion Detection (NEW in v3.2.0)
+### Anti-Evasion Detection
 
 Detect advanced malware hiding techniques:
 
@@ -90,6 +90,17 @@ Detect advanced malware hiding techniques:
 - **Rootkit Detection** - Detect hidden drivers and kernel-level rootkits
 - **API Hook Detection** - Find malware intercepting system calls
 - **Alternate Data Stream Detection** - Find data hidden in NTFS streams
+
+### Tier 3 Premium Features (NEW in v3.6.0)
+
+| Feature | Description |
+|---------|-------------|
+| **USB Protection** | Auto-scan USB drives on connect, block autorun.inf, real-time monitoring |
+| **Ransomware Protection** | Folder protection, honeypot files, entropy detection, instant alerts |
+| **Scheduled Scans** | Daily/weekly/monthly automated scans with full customization |
+| **Gaming Mode** | Auto-detect games, reduce CPU usage, suppress notifications |
+| **Browser Protection** | Scan and remove malicious extensions from all major browsers |
+| **System Cleanup** | Clean temp files, browser cache, recycle bin, and Windows logs |
 
 ### Real-time Protection
 
@@ -153,14 +164,14 @@ Detects threats including:
 No installation required. Download, extract, and run.
 
 ```
-SkidrowKiller-v3.2.0-win-x64-portable.zip
+SkidrowKiller-v3.6.0-win-x64-portable.zip
 ```
 
 #### Option 2: Framework-dependent Version
 Smaller download, requires .NET 8.0 Runtime installed.
 
 ```
-SkidrowKiller-v3.2.0-win-x64-framework.zip
+SkidrowKiller-v3.6.0-win-x64-framework.zip
 ```
 
 ### Quick Start
@@ -213,30 +224,36 @@ SkidrowKiller-v3.2.0-win-x64-framework.zip
 
 ---
 
-## What's New in v3.2.0
+## What's New in v3.6.0
 
 ### Major Features
 
-1. **Advanced Detection Engines**
-   - MalwareSignatureDatabase with 1000+ hashes
-   - PEAnalyzer for deep PE file analysis
-   - HeuristicEngine for behavioral detection
+1. **Tier 3 Premium Feature Views**
+   - USB Protection View with device monitoring and auto-scan
+   - Ransomware Protection View with folder management and honeypot status
+   - Scheduled Scan View with calendar and schedule editor
+   - Gaming Mode View with session tracking and settings
 
-2. **Network Protection**
+2. **Browser Protection** (v3.4.0)
+   - Scan Chrome, Firefox, Edge, Brave, Opera for malicious extensions
+   - One-click removal of detected threats
+   - Extension threat analysis
+
+3. **System Cleanup** (v3.4.0)
+   - Clean temp files, browser cache, recycle bin
+   - Windows logs cleanup
+   - Space calculation and safe cleanup
+
+4. **Network Protection** (v3.2.0)
    - Block warez/crack/torrent domains
    - Source analysis to find infection root cause
    - Deep scan targeting related processes
 
-3. **Self-Protection**
+5. **Self-Protection** (v3.2.0)
    - Anti-debugging measures
    - DLL injection detection
    - File integrity monitoring
    - Process termination protection
-
-4. **Anti-Evasion**
-   - Process hollowing detection
-   - Hidden process detection
-   - Rootkit detection
 
 ---
 
@@ -336,11 +353,19 @@ We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) 
 ### Planned Features
 
 - [ ] Multi-language UI (English, Thai, Chinese, Japanese, Korean)
-- [ ] Scheduled scanning
 - [ ] Email notifications
 - [ ] Cloud signature updates
 - [ ] REST API for integration
 - [ ] Browser extension for real-time web protection
+- [ ] Cross-platform support (.NET MAUI)
+
+### Completed in v3.6.0
+- [x] USB Protection with dedicated view
+- [x] Ransomware Protection with dedicated view
+- [x] Scheduled Scans with calendar UI
+- [x] Gaming Mode with session tracking
+- [x] Browser Protection
+- [x] System Cleanup utility
 
 ### Completed in v3.2.0
 - [x] Advanced malware detection engines
@@ -378,7 +403,7 @@ This software is provided "as is" without warranty. Users are responsible for:
 ---
 
 <p align="center">
-  <strong>Skidrow Killer v3.2.0</strong> - Professional Security for Windows
+  <strong>Skidrow Killer v3.6.0</strong> - Professional Security for Windows
   <br>
   Made with ❤️ by <a href="https://github.com/xjanova">xman studio</a>
 </p>

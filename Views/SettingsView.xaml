@@ -756,18 +756,19 @@
                 </StackPanel>
             </Border>
 
-            <!-- Database & Updates Section -->
-            <TextBlock Text="DATABASE &amp; UPDATES" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+            <!-- Threat Intelligence Section -->
+            <TextBlock Text="THREAT INTELLIGENCE" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
                        Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,12,0,12"/>
             <Border Style="{StaticResource SettingsCardStyle}">
                 <StackPanel>
-                    <!-- Virus Database Info -->
+                    <!-- Threat Intel Database Info -->
                     <StackPanel Margin="0,0,0,16">
-                        <!-- Header Row: Icon + Title + Update Button -->
+                        <!-- Header Row: Icon + Title + Buttons -->
                         <Grid Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
@@ -781,60 +782,107 @@
                             </Border>
 
                             <!-- Title -->
-                            <TextBlock Grid.Column="1" Text="Virus Definition Database"
-                                       Style="{StaticResource SubHeaderTextStyle}" FontSize="14"
-                                       VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Threat Intelligence Database"
+                                           Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                                <TextBlock Text="Multi-source threat data from abuse.ch, ClamAV, YARA rules"
+                                           Style="{StaticResource BodyTextStyle}" FontSize="11"
+                                           Foreground="{StaticResource TextTertiaryBrush}"/>
+                            </StackPanel>
+
+                            <!-- Manage Button -->
+                            <Button x:Name="BtnManageThreatIntel" Grid.Column="2" Style="{StaticResource SecondaryButtonStyle}"
+                                    Click="ManageThreatIntel_Click" Padding="12,8" Margin="0,0,8,0" VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal">
+                                    <Path Width="14" Height="14" Stretch="Uniform" Fill="{StaticResource TextPrimaryBrush}" Margin="0,0,6,0"
+                                          Data="M12,15.5A3.5,3.5 0 0,1 8.5,12A3.5,3.5 0 0,1 12,8.5A3.5,3.5 0 0,1 15.5,12A3.5,3.5 0 0,1 12,15.5M19.43,12.97C19.47,12.65 19.5,12.33 19.5,12C19.5,11.67 19.47,11.34 19.43,11L21.54,9.37C21.73,9.22 21.78,8.95 21.66,8.73L19.66,5.27C19.54,5.05 19.27,4.96 19.05,5.05L16.56,6.05C16.04,5.66 15.5,5.32 14.87,5.07L14.5,2.42C14.46,2.18 14.25,2 14,2H10C9.75,2 9.54,2.18 9.5,2.42L9.13,5.07C8.5,5.32 7.96,5.66 7.44,6.05L4.95,5.05C4.73,4.96 4.46,5.05 4.34,5.27L2.34,8.73C2.21,8.95 2.27,9.22 2.46,9.37L4.57,11C4.53,11.34 4.5,11.67 4.5,12C4.5,12.33 4.53,12.65 4.57,12.97L2.46,14.63C2.27,14.78 2.21,15.05 2.34,15.27L4.34,18.73C4.46,18.95 4.73,19.03 4.95,18.95L7.44,17.94C7.96,18.34 8.5,18.68 9.13,18.93L9.5,21.58C9.54,21.82 9.75,22 10,22H14C14.25,22 14.46,21.82 14.5,21.58L14.87,18.93C15.5,18.67 16.04,18.34 16.56,17.94L19.05,18.95C19.27,19.03 19.54,18.95 19.66,18.73L21.66,15.27C21.78,15.05 21.73,14.78 21.54,14.63L19.43,12.97Z"/>
+                                    <TextBlock Text="Manage" FontSize="12"/>
+                                </StackPanel>
+                            </Button>
 
                             <!-- Update Button -->
-                            <Button x:Name="BtnUpdateDatabase" Grid.Column="2" Style="{StaticResource SuccessButtonStyle}"
+                            <Button x:Name="BtnUpdateDatabase" Grid.Column="3" Style="{StaticResource SuccessButtonStyle}"
                                     Click="UpdateDatabase_Click" Padding="12,8" VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
                                     <Path Width="14" Height="14" Stretch="Uniform" Fill="White" Margin="0,0,6,0"
                                           Data="M17.65,6.35C16.2,4.9 14.21,4 12,4C7.58,4 4.01,7.58 4.01,12C4.01,16.42 7.58,20 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18C8.69,18 6,15.31 6,12C6,8.69 8.69,6 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z"/>
-                                    <TextBlock Text="Update" FontSize="12"/>
+                                    <TextBlock Text="Update All" FontSize="12"/>
                                 </StackPanel>
                             </Button>
                         </Grid>
 
-                        <!-- Database Details -->
+                        <!-- Database Stats Grid -->
                         <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="12">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
 
-                                <!-- Version -->
+                                <!-- Hashes -->
                                 <StackPanel Grid.Column="0">
-                                    <TextBlock Text="Version" Style="{StaticResource BodyTextStyle}"
+                                    <TextBlock Text="Malware Hashes" Style="{StaticResource BodyTextStyle}"
                                                Opacity="0.6" FontSize="11"/>
-                                    <TextBlock x:Name="TxtDbVersion" Text="2026.01.08.001"
+                                    <TextBlock x:Name="TxtDbHashes" Text="0"
                                                Style="{StaticResource BodyTextStyle}"
-                                               Foreground="{StaticResource CyanPrimaryBrush}"
+                                               Foreground="{StaticResource AccentPrimaryBrush}"
                                                FontWeight="SemiBold" FontSize="12" Margin="0,2,0,0"/>
                                 </StackPanel>
 
-                                <!-- Last Updated -->
+                                <!-- URLs -->
                                 <StackPanel Grid.Column="1">
-                                    <TextBlock Text="Last Updated" Style="{StaticResource BodyTextStyle}"
+                                    <TextBlock Text="Malicious URLs" Style="{StaticResource BodyTextStyle}"
                                                Opacity="0.6" FontSize="11"/>
-                                    <TextBlock x:Name="TxtDbLastUpdate" Text="Today at 12:00"
+                                    <TextBlock x:Name="TxtDbUrls" Text="0"
                                                Style="{StaticResource BodyTextStyle}"
-                                               FontSize="12" Margin="0,2,0,0"/>
+                                               Foreground="{StaticResource WarningBrush}"
+                                               FontWeight="SemiBold" FontSize="12" Margin="0,2,0,0"/>
                                 </StackPanel>
 
-                                <!-- Signatures -->
+                                <!-- IPs -->
                                 <StackPanel Grid.Column="2">
-                                    <TextBlock Text="Signatures" Style="{StaticResource BodyTextStyle}"
+                                    <TextBlock Text="C&amp;C IPs" Style="{StaticResource BodyTextStyle}"
                                                Opacity="0.6" FontSize="11"/>
-                                    <TextBlock x:Name="TxtDbSignatures" Text="125,847"
+                                    <TextBlock x:Name="TxtDbIPs" Text="0"
+                                               Style="{StaticResource BodyTextStyle}"
+                                               Foreground="{StaticResource DangerBrush}"
+                                               FontWeight="SemiBold" FontSize="12" Margin="0,2,0,0"/>
+                                </StackPanel>
+
+                                <!-- YARA Rules -->
+                                <StackPanel Grid.Column="3">
+                                    <TextBlock Text="YARA Rules" Style="{StaticResource BodyTextStyle}"
+                                               Opacity="0.6" FontSize="11"/>
+                                    <TextBlock x:Name="TxtDbYara" Text="0"
                                                Style="{StaticResource BodyTextStyle}"
                                                Foreground="{StaticResource GreenPrimaryBrush}"
                                                FontWeight="SemiBold" FontSize="12" Margin="0,2,0,0"/>
                                 </StackPanel>
                             </Grid>
                         </Border>
+
+                        <!-- Last Update & Tier Info -->
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="TxtDbLastUpdate" Text="Last updated: Never"
+                                       Style="{StaticResource BodyTextStyle}" FontSize="11"
+                                       Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center"/>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                <TextBlock Text="Tier: " Style="{StaticResource BodyTextStyle}" FontSize="11"
+                                           Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center"/>
+                                <Border x:Name="TierBadge" Background="{StaticResource AccentPrimaryBrush}"
+                                        CornerRadius="3" Padding="6,2">
+                                    <TextBlock x:Name="TxtCurrentTier" Text="Free" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                                </Border>
+                                <TextBlock x:Name="TxtAvailableFeeds" Text=" (5/12 feeds)" Style="{StaticResource BodyTextStyle}" FontSize="11"
+                                           Foreground="{StaticResource TextTertiaryBrush}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
                     </StackPanel>
 
                     <Separator Background="{StaticResource BorderBrush}" Height="1" Margin="0,0,0,16"/>
@@ -846,8 +894,8 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
-                            <TextBlock Text="Auto-update database" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
-                            <TextBlock Text="Automatically download latest virus definitions"
+                            <TextBlock Text="Auto-update threat database" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically download latest threat intelligence from all sources"
                                        Style="{StaticResource BodyTextStyle}" Foreground="{StaticResource TextTertiaryBrush}"/>
                         </StackPanel>
                         <CheckBox x:Name="ChkAutoUpdateDb" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
@@ -862,7 +910,7 @@
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="Update frequency" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
-                            <TextBlock Text="How often to check for database updates"
+                            <TextBlock Text="How often to check for threat intelligence updates"
                                        Style="{StaticResource BodyTextStyle}" Foreground="{StaticResource TextTertiaryBrush}"/>
                         </StackPanel>
                         <ComboBox x:Name="CmbUpdateFrequency" Grid.Column="1" Style="{StaticResource ModernComboBoxStyle}"
@@ -884,9 +932,9 @@
                             <Path x:Name="DbStatusIcon" Width="20" Height="20" Stretch="Uniform" Margin="0,0,12,0"
                                   Fill="{StaticResource GreenPrimaryBrush}"
                                   Data="M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z"/>
-                            <TextBlock x:Name="TxtDbStatus" Grid.Column="1" Text="Database is up to date"
+                            <TextBlock x:Name="TxtDbStatus" Grid.Column="1" Text="Click 'Update All' to download threat intelligence"
                                        Style="{StaticResource BodyTextStyle}" VerticalAlignment="Center"
-                                       Foreground="{StaticResource GreenPrimaryBrush}"/>
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
                         </Grid>
                     </Border>
                 </StackPanel>

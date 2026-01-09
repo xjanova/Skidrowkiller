@@ -49,6 +49,7 @@ namespace SkidrowKiller.Views
 
             if (_backup.Restore(id))
             {
+                RefreshBackups();
                 MessageBox.Show("Item restored successfully!", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }

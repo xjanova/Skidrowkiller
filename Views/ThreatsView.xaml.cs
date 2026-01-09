@@ -30,6 +30,9 @@ namespace SkidrowKiller.Views
             {
                 _threats.Add(threat);
                 RefreshThreats();
+
+                // Auto-scroll to bottom to show newest threat
+                ThreatsScrollViewer.ScrollToEnd();
             });
         }
 
@@ -116,24 +119,24 @@ namespace SkidrowKiller.Views
 
         private async void RemoveAllButton_Click(object sender, RoutedEventArgs e)
         {
-            var selected = ThreatsListBox.SelectedItems.Cast<ThreatInfo>().ToList();
-            if (!selected.Any())
+            if (!_threats.Any())
             {
-                MessageBox.Show("Please select threats to remove.", "No Selection",
+                MessageBox.Show("No threats to remove.", "No Threats",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var result = MessageBox.Show(
-                $"Remove {selected.Count} selected threats?\n\nBackups will be created first.",
+                $"Remove all {_threats.Count} threats?\n\nBackups will be created first.",
                 "Confirm Removal",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result != MessageBoxResult.Yes) return;
 
+            var toRemove = _threats.ToList();
             var removed = 0;
-            foreach (var threat in selected)
+            foreach (var threat in toRemove)
             {
                 if (await _scanner.RemoveThreatAsync(threat, backup: true))
                 {
@@ -143,51 +146,59 @@ namespace SkidrowKiller.Views
             }
 
             RefreshThreats();
-            MessageBox.Show($"Removed {removed} of {selected.Count} threats.", "Complete",
+            MessageBox.Show($"Removed {removed} of {toRemove.Count} threats.", "Complete",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void WhitelistAllButton_Click(object sender, RoutedEventArgs e)
         {
-            var selected = ThreatsListBox.SelectedItems.Cast<ThreatInfo>().ToList();
-            if (!selected.Any())
+            if (!_threats.Any())
             {
-                MessageBox.Show("Please select threats to whitelist.", "No Selection",
+                MessageBox.Show("No threats to whitelist.", "No Threats",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
-            foreach (var threat in selected)
+            var result = MessageBox.Show(
+                $"Whitelist all {_threats.Count} threats?\n\nThey will be marked as safe.",
+                "Confirm Whitelist",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (result != MessageBoxResult.Yes) return;
+
+            var count = _threats.Count;
+            foreach (var threat in _threats.ToList())
             {
                 _whitelist.AddToWhitelist(threat.Path, "User confirmed as safe");
                 _threats.Remove(threat);
             }
 
             RefreshThreats();
-            MessageBox.Show($"Added {selected.Count} items to whitelist.", "Whitelisted",
+            MessageBox.Show($"Added {count} items to whitelist.", "Whitelisted",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void QuarantineAllButton_Click(object sender, RoutedEventArgs e)
         {
-            var selected = ThreatsListBox.SelectedItems.Cast<ThreatInfo>().ToList();
-            if (!selected.Any())
+            if (!_threats.Any())
             {
-                MessageBox.Show("Please select threats to quarantine.", "No Selection",
+                MessageBox.Show("No threats to quarantine.", "No Threats",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
             var result = MessageBox.Show(
-                $"Quarantine {selected.Count} selected threats?\n\nFiles will be encrypted and isolated.",
+                $"Quarantine all {_threats.Count} threats?\n\nFiles will be encrypted and isolated.",
                 "Confirm Quarantine",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result != MessageBoxResult.Yes) return;
 
+            var toQuarantine = _threats.ToList();
             var quarantined = 0;
-            foreach (var threat in selected)
+            foreach (var threat in toQuarantine)
             {
                 var qResult = _quarantine.QuarantineFile(threat.Path, threat);
                 if (qResult.Success)
@@ -198,7 +209,7 @@ namespace SkidrowKiller.Views
             }
 
             RefreshThreats();
-            MessageBox.Show($"Quarantined {quarantined} of {selected.Count} threats.", "Complete",
+            MessageBox.Show($"Quarantined {quarantined} of {toQuarantine.Count} threats.", "Complete",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }

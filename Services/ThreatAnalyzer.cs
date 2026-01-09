@@ -360,13 +360,24 @@ namespace SkidrowKiller.Services
                 return null;
             }
 
+            var category = ClassifyThreatCategory(matchedPatterns, lowerName, lowerPath);
+            var malwareName = GenerateMalwareName(category, matchedPatterns, name);
+            var (recommendation, canIgnore) = GenerateRecommendation(category, severity, matchedPatterns);
+            var detectionReason = GenerateDetectionReason(matchedPatterns);
+
             return new ThreatInfo
             {
                 Type = isFile ? ThreatType.File : ThreatType.Directory,
                 Severity = severity,
+                Category = category,
                 Path = path,
                 Name = name,
+                MalwareName = malwareName,
+                MalwareFamily = ExtractMalwareFamily(matchedPatterns),
                 Description = GenerateDescription(matchedPatterns, severity),
+                DetectionReason = detectionReason,
+                Recommendation = recommendation,
+                CanIgnore = canIgnore,
                 Score = Math.Min(score, 100),
                 MatchedPatterns = matchedPatterns
             };
@@ -867,5 +878,289 @@ namespace SkidrowKiller.Services
         /// Gets the heuristic engine for direct access
         /// </summary>
         public HeuristicEngine HeuristicEngine => _heuristicEngine;
+
+        #region Threat Classification
+
+        /// <summary>
+        /// Classifies the threat into a category based on matched patterns
+        /// </summary>
+        private ThreatCategory ClassifyThreatCategory(List<string> patterns, string lowerName, string lowerPath)
+        {
+            var patternsLower = string.Join(" ", patterns).ToLower();
+
+            // Check for dangerous malware first (highest priority)
+            if (patternsLower.Contains("ransomware") || patternsLower.Contains("wannacry") ||
+                patternsLower.Contains("ryuk") || patternsLower.Contains("lockbit"))
+                return ThreatCategory.Ransomware;
+
+            if (patternsLower.Contains("njrat") || patternsLower.Contains("darkcomet") ||
+                patternsLower.Contains("asyncrat") || patternsLower.Contains("quasarrat") ||
+                patternsLower.Contains("nanocore") || patternsLower.Contains("remcos"))
+                return ThreatCategory.RAT;
+
+            if (patternsLower.Contains("redline") || patternsLower.Contains("vidar") ||
+                patternsLower.Contains("raccoon") || patternsLower.Contains("azorult") ||
+                patternsLower.Contains("stealer"))
+                return ThreatCategory.Stealer;
+
+            if (patternsLower.Contains("emotet") || patternsLower.Contains("trickbot") ||
+                patternsLower.Contains("qakbot") || patternsLower.Contains("dridex") ||
+                patternsLower.Contains("botnet"))
+                return ThreatCategory.Botnet;
+
+            if (patternsLower.Contains("rootkit"))
+                return ThreatCategory.Rootkit;
+
+            if (patternsLower.Contains("trojan") || patternsLower.Contains("backdoor"))
+                return ThreatCategory.Trojan;
+
+            if (patternsLower.Contains("xmrig") || patternsLower.Contains("cpuminer") ||
+                patternsLower.Contains("cgminer") || patternsLower.Contains("cryptominer") ||
+                patternsLower.Contains("ethminer"))
+                return ThreatCategory.Cryptominer;
+
+            if (patternsLower.Contains("keylogger") || patternsLower.Contains("spyware"))
+                return ThreatCategory.Spyware;
+
+            // Check for crack-related tools
+            if (patternsLower.Contains("keygen") || lowerName.Contains("keygen"))
+                return ThreatCategory.Keygen;
+
+            if (patternsLower.Contains("trainer") || lowerName.Contains("trainer"))
+                return ThreatCategory.Trainer;
+
+            if (patternsLower.Contains("kmspico") || patternsLower.Contains("kmsauto") ||
+                patternsLower.Contains("hwidgen") || patternsLower.Contains("activator"))
+                return ThreatCategory.Activator;
+
+            if (patternsLower.Contains("steam_api") || patternsLower.Contains("steam_emu") ||
+                patternsLower.Contains("cream_api") || patternsLower.Contains("goldberg") ||
+                patternsLower.Contains("smartsteamemu"))
+                return ThreatCategory.SteamEmulator;
+
+            if (patternsLower.Contains("loader") || lowerName.Contains("loader"))
+                return ThreatCategory.Loader;
+
+            if (patternsLower.Contains("patch") || lowerName.Contains("patcher"))
+                return ThreatCategory.Patcher;
+
+            // Scene group cracks
+            if (patternsLower.Contains("skidrow") || patternsLower.Contains("codex") ||
+                patternsLower.Contains("plaza") || patternsLower.Contains("reloaded") ||
+                patternsLower.Contains("cpy") || patternsLower.Contains("fitgirl") ||
+                patternsLower.Contains("empress") || patternsLower.Contains("dodi") ||
+                patternsLower.Contains("3dm") || patternsLower.Contains("crack"))
+                return ThreatCategory.Crack;
+
+            if (patternsLower.Contains("adware") || patternsLower.Contains("pup"))
+                return ThreatCategory.Adware;
+
+            return ThreatCategory.Suspicious;
+        }
+
+        /// <summary>
+        /// Generates a malware name like "Crack.Skidrow" or "Trojan.Redline"
+        /// </summary>
+        private string GenerateMalwareName(ThreatCategory category, List<string> patterns, string fileName)
+        {
+            var family = ExtractMalwareFamily(patterns);
+            var prefix = category switch
+            {
+                ThreatCategory.Crack => "Crack",
+                ThreatCategory.Keygen => "HackTool.Keygen",
+                ThreatCategory.Trainer => "HackTool.Trainer",
+                ThreatCategory.Patcher => "HackTool.Patcher",
+                ThreatCategory.Loader => "HackTool.Loader",
+                ThreatCategory.Activator => "HackTool.Activator",
+                ThreatCategory.SteamEmulator => "HackTool.SteamEmu",
+                ThreatCategory.Trojan => "Trojan",
+                ThreatCategory.Ransomware => "Ransom",
+                ThreatCategory.Cryptominer => "CoinMiner",
+                ThreatCategory.Stealer => "Stealer",
+                ThreatCategory.RAT => "RAT",
+                ThreatCategory.Spyware => "Spyware",
+                ThreatCategory.Adware => "Adware",
+                ThreatCategory.Rootkit => "Rootkit",
+                ThreatCategory.Botnet => "Botnet",
+                _ => "Suspicious"
+            };
+
+            if (!string.IsNullOrEmpty(family))
+            {
+                return $"{prefix}.{family}";
+            }
+
+            // Use filename as identifier if no family found
+            var cleanName = System.IO.Path.GetFileNameWithoutExtension(fileName)
+                .Replace(" ", "")
+                .Replace("-", "")
+                .Replace("_", "");
+            if (cleanName.Length > 15) cleanName = cleanName.Substring(0, 15);
+
+            return $"{prefix}.{cleanName}";
+        }
+
+        /// <summary>
+        /// Extracts the malware family name from patterns
+        /// </summary>
+        private string ExtractMalwareFamily(List<string> patterns)
+        {
+            // Scene groups
+            string[] sceneGroups = { "skidrow", "codex", "plaza", "reloaded", "cpy", "fitgirl",
+                                     "empress", "dodi", "3dm", "ali213", "hoodlum", "razor1911" };
+            // Malware families
+            string[] malwareFamilies = { "redline", "vidar", "raccoon", "azorult", "njrat",
+                                          "darkcomet", "asyncrat", "quasarrat", "nanocore",
+                                          "emotet", "trickbot", "wannacry", "ryuk", "lockbit",
+                                          "xmrig", "kmspico", "kmsauto" };
+
+            var patternsLower = string.Join(" ", patterns).ToLower();
+
+            foreach (var group in sceneGroups)
+            {
+                if (patternsLower.Contains(group))
+                    return char.ToUpper(group[0]) + group.Substring(1);
+            }
+
+            foreach (var family in malwareFamilies)
+            {
+                if (patternsLower.Contains(family))
+                    return char.ToUpper(family[0]) + family.Substring(1);
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// Generates recommendation and determines if threat can be ignored
+        /// </summary>
+        private (string Recommendation, bool CanIgnore) GenerateRecommendation(
+            ThreatCategory category, ThreatSeverity severity, List<string> patterns)
+        {
+            return category switch
+            {
+                // Dangerous - NEVER ignore
+                ThreatCategory.Ransomware => (
+                    "DELETE IMMEDIATELY! Ransomware can encrypt all your files and demand payment. " +
+                    "Disconnect from network and run full scan.",
+                    false),
+
+                ThreatCategory.RAT => (
+                    "DELETE IMMEDIATELY! Remote Access Trojans allow hackers to control your computer. " +
+                    "Change all passwords after removal.",
+                    false),
+
+                ThreatCategory.Stealer => (
+                    "DELETE IMMEDIATELY! This malware steals passwords, credit cards, and personal data. " +
+                    "Change all passwords after removal.",
+                    false),
+
+                ThreatCategory.Botnet => (
+                    "DELETE IMMEDIATELY! Your computer may be part of a criminal network. " +
+                    "Full system scan recommended.",
+                    false),
+
+                ThreatCategory.Rootkit => (
+                    "DELETE IMMEDIATELY! Rootkits hide deep in your system. " +
+                    "Consider reinstalling Windows if problems persist.",
+                    false),
+
+                ThreatCategory.Trojan => (
+                    "Delete recommended. Trojans can steal data and install other malware. " +
+                    "Run full system scan after removal.",
+                    false),
+
+                ThreatCategory.Cryptominer => (
+                    "Delete recommended. Crypto miners slow your computer and increase electricity costs. " +
+                    "Check CPU usage to verify.",
+                    false),
+
+                ThreatCategory.Spyware => (
+                    "Delete recommended. Spyware monitors your activity and steals information. " +
+                    "Check for other infections.",
+                    false),
+
+                // Cracks - User decision
+                ThreatCategory.Crack => severity >= ThreatSeverity.High
+                    ? ("This crack may contain hidden malware. Many cracks bundle trojans or miners. " +
+                       "Delete unless you fully trust the source.", false)
+                    : ("Game crack detected from scene group. While not always malicious, " +
+                       "cracks can contain hidden malware. Delete if you didn't intentionally download this.", true),
+
+                ThreatCategory.Keygen => (
+                    "Key generators often contain hidden malware. They are also illegal in most countries. " +
+                    "Delete recommended - use legitimate software instead.",
+                    severity < ThreatSeverity.High),
+
+                ThreatCategory.Trainer => (
+                    "Game trainer/cheat detected. While often harmless, some contain malware. " +
+                    "Keep only if downloaded from a trusted source.",
+                    severity < ThreatSeverity.Medium),
+
+                ThreatCategory.Activator => (
+                    "Windows/Office activator detected (e.g., KMSpico). These are illegal and often " +
+                    "bundled with malware. Delete and use legitimate licenses.",
+                    false),
+
+                ThreatCategory.SteamEmulator => severity >= ThreatSeverity.High
+                    ? ("Steam emulator detected outside of normal game folder. May indicate piracy or malware.", false)
+                    : ("Steam API emulator detected. Common in cracked games. " +
+                       "Safe if you intentionally installed the game.", true),
+
+                ThreatCategory.Loader or ThreatCategory.Patcher => (
+                    "Crack loader/patcher detected. Can modify game files. " +
+                    "Delete if not intentionally used for a specific game.",
+                    severity < ThreatSeverity.High),
+
+                ThreatCategory.Adware => (
+                    "Adware/PUP detected. Displays unwanted ads and may track your activity. " +
+                    "Removal recommended for privacy and performance.",
+                    true),
+
+                _ => severity >= ThreatSeverity.High
+                    ? ("Suspicious file detected. Delete recommended due to high threat score.", false)
+                    : ("Suspicious file detected. Review manually if you recognize this file.", true)
+            };
+        }
+
+        /// <summary>
+        /// Generates a human-readable detection reason
+        /// </summary>
+        private string GenerateDetectionReason(List<string> patterns)
+        {
+            var reasons = new List<string>();
+
+            foreach (var pattern in patterns.Take(5))
+            {
+                if (pattern.Contains("[MALWARE]"))
+                    reasons.Add("Known malware pattern detected");
+                else if (pattern.Contains("[HIGH]"))
+                    reasons.Add("Scene group crack signature");
+                else if (pattern.Contains("[DLL]"))
+                    reasons.Add("Suspicious DLL file");
+                else if (pattern.Contains("[INJECTED]"))
+                    reasons.Add("DLL injection detected");
+                else if (pattern.Contains("[HASH]"))
+                    reasons.Add("Known malware hash match");
+                else if (pattern.Contains("[PE]"))
+                    reasons.Add("Suspicious executable structure");
+                else if (pattern.Contains("[YARA]"))
+                    reasons.Add("YARA rule match");
+                else if (pattern.Contains("[HEUR]"))
+                    reasons.Add("Heuristic analysis flag");
+                else if (pattern.Contains("[VT]"))
+                    reasons.Add("VirusTotal detection");
+                else if (pattern.Contains("[ENTROPY]"))
+                    reasons.Add("Packed/encrypted file");
+                else if (pattern.Contains("[MED]"))
+                    reasons.Add("Suspicious pattern in filename");
+            }
+
+            return reasons.Count > 0
+                ? string.Join("; ", reasons.Distinct())
+                : "Pattern matching detected suspicious content";
+        }
+
+        #endregion
     }
 }

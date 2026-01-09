@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,7 +23,60 @@ namespace SkidrowKiller.Views
             // Display Device ID
             DeviceIdTextBlock.Text = _licenseService.GetDeviceId();
 
+            // Populate features comparison
+            LoadFeaturesComparison();
+
             UpdateUI();
+        }
+
+        private void LoadFeaturesComparison()
+        {
+            var features = new List<FeatureComparisonItem>
+            {
+                // Scanning Features
+                new("Quick Scan", "✓", "✓", "✓"),
+                new("Full System Scan", "✓", "✓", "✓"),
+                new("Custom Scan", "✓", "✓", "✓"),
+                new("Registry Scan", "✓", "✓", "✓"),
+                new("Process Scan", "✓", "✓", "✓"),
+
+                // Protection Features
+                new("Real-time Protection", "—", "✓", "✓"),
+                new("USB Auto-Scan", "—", "✓", "✓"),
+                new("Browser Protection", "—", "✓", "✓"),
+                new("Gaming Mode", "—", "✓", "✓"),
+                new("Ransomware Protection", "—", "✓", "✓"),
+
+                // Threat Intelligence
+                new("Basic Threat Feeds", "5 feeds", "9 feeds", "12+ feeds"),
+                new("MalwareBazaar Hashes", "✓", "✓", "✓"),
+                new("URLhaus Malicious URLs", "✓", "✓", "✓"),
+                new("ThreatFox IOCs", "✓", "✓", "✓"),
+                new("Feodo Tracker C&C", "✓", "✓", "✓"),
+                new("SSL Blacklist", "✓", "✓", "✓"),
+                new("YARA Rules (abuse.ch)", "—", "✓", "✓"),
+                new("ClamAV Signatures", "—", "✓", "✓"),
+                new("YARA Rules (YARAify)", "—", "✓", "✓"),
+                new("Emerging Threats", "—", "✓", "✓"),
+                new("Custom Enterprise Feeds", "—", "—", "✓"),
+                new("Premium IOC Database", "—", "—", "✓"),
+                new("Early Access Signatures", "—", "—", "✓"),
+
+                // Management Features
+                new("Quarantine Management", "✓", "✓", "✓"),
+                new("Whitelist Management", "✓", "✓", "✓"),
+                new("System Cleanup", "—", "✓", "✓"),
+                new("Startup Services Control", "—", "✓", "✓"),
+                new("Scheduled Scans", "—", "✓", "✓"),
+
+                // Support
+                new("Community Support", "✓", "✓", "✓"),
+                new("Email Support", "—", "✓", "✓"),
+                new("Priority Support", "—", "—", "✓"),
+                new("Phone Support", "—", "—", "✓"),
+            };
+
+            FeaturesList.ItemsSource = features;
         }
 
         private void LicenseService_StatusChanged(object? sender, LicenseStatus status)
@@ -66,14 +120,18 @@ namespace SkidrowKiller.Views
             DaysBadge.Visibility = Visibility.Collapsed;
             ActivationPanel.Visibility = Visibility.Visible;
             LicensedPanel.Visibility = Visibility.Collapsed;
+
+            // Show trial section for new users
+            TrialSection.Visibility = Visibility.Visible;
             StartTrialButton.IsEnabled = true;
+            StartTrialButton.Content = "Start 7-Day Trial";
         }
 
         private void ShowTrialState(LicenseInfo license)
         {
-            LicenseStatusLabel.Text = "Trial Version";
+            LicenseStatusLabel.Text = "Trial Version (Enterprise)";
             LicenseStatusLabel.Foreground = (Brush)FindResource("WarningBrush");
-            LicenseDetailLabel.Text = "Limited features. Upgrade to Pro for full access.";
+            LicenseDetailLabel.Text = "All Enterprise features unlocked! Purchase to continue after trial.";
 
             StatusIcon.Data = Geometry.Parse("M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z");
             StatusIcon.Fill = (Brush)FindResource("WarningBrush");
@@ -89,8 +147,9 @@ namespace SkidrowKiller.Views
 
             ActivationPanel.Visibility = Visibility.Visible;
             LicensedPanel.Visibility = Visibility.Collapsed;
-            StartTrialButton.IsEnabled = false;
-            StartTrialButton.Content = "Trial Active";
+
+            // IMPORTANT: Hide the entire trial section to prevent trial reset
+            TrialSection.Visibility = Visibility.Collapsed;
         }
 
         private void ShowLicensedState(LicenseInfo license)
@@ -126,8 +185,9 @@ namespace SkidrowKiller.Views
 
             ActivationPanel.Visibility = Visibility.Collapsed;
             LicensedPanel.Visibility = Visibility.Visible;
-            StartTrialButton.IsEnabled = false;
-            StartTrialButton.Content = "License Active";
+
+            // Hide trial section for licensed users
+            TrialSection.Visibility = Visibility.Collapsed;
         }
 
         private void UpdateStatusGlow(Color color)
@@ -335,5 +395,24 @@ namespace SkidrowKiller.Views
             UpdateUI();
         }
 
+    }
+
+    /// <summary>
+    /// ViewModel for feature comparison table rows
+    /// </summary>
+    public class FeatureComparisonItem
+    {
+        public string Name { get; }
+        public string FreeStatus { get; }
+        public string ProStatus { get; }
+        public string EnterpriseStatus { get; }
+
+        public FeatureComparisonItem(string name, string free, string pro, string enterprise)
+        {
+            Name = name;
+            FreeStatus = free;
+            ProStatus = pro;
+            EnterpriseStatus = enterprise;
+        }
     }
 }

@@ -14,7 +14,7 @@ namespace SkidrowKiller.Services
 {
     /// <summary>
     /// License service for XMAN Studio integration.
-    /// API Base: https://xman4289.com/api/v1/license (production server - pending launch)
+    /// API Base: https://test.xman4289.com/api/v1/license (test server)
     ///
     /// This service provides:
     /// - License key activation and validation
@@ -22,13 +22,11 @@ namespace SkidrowKiller.Services
     /// - Trial/demo mode with offline support
     /// - Automatic connectivity checking with grace period
     /// - Encrypted local license storage
-    ///
-    /// Note: Until xman4289.com is launched, the app runs in extended trial mode.
     /// </summary>
     public class LicenseService
     {
-        // Production API (will be enabled when xman4289.com launches)
-        private const string API_BASE_URL = "https://xman4289.com/api/v1/license";
+        // Test API server
+        private const string API_BASE_URL = "https://test.xman4289.com/api/v1/license";
         private const string PRODUCT_ID = "skidrow-killer";
         private const string LICENSE_FILE = "license.dat";
         private const string CONNECTIVITY_FILE = "connectivity.dat";
@@ -38,6 +36,7 @@ namespace SkidrowKiller.Services
 
         private readonly HttpClient _httpClient;
         private readonly ILogger _logger;
+        private readonly SettingsDatabase? _db;
         private readonly string _licenseFilePath;
         private readonly string _connectivityFilePath;
         private readonly System.Timers.Timer _connectivityTimer;
@@ -55,8 +54,9 @@ namespace SkidrowKiller.Services
         public int DaysRemaining => _currentLicense?.DaysRemaining ?? 0;
         public DateTime LastConnectionTime => _lastSuccessfulConnection;
 
-        public LicenseService()
+        public LicenseService(SettingsDatabase? db = null)
         {
+            _db = db;
             _httpClient = new HttpClient
             {
                 Timeout = TimeSpan.FromSeconds(30)
@@ -338,7 +338,7 @@ namespace SkidrowKiller.Services
         public string GetPurchaseUrl()
         {
             var deviceId = GetDeviceId();
-            return $"https://xman4289.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
+            return $"https://test.xman4289.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
         }
 
         #endregion
@@ -643,9 +643,25 @@ namespace SkidrowKiller.Services
 
             try
             {
+                // Save encrypted to file (legacy support)
                 var json = JsonSerializer.Serialize(_currentLicense);
                 var encryptedData = EncryptData(json);
                 File.WriteAllBytes(_licenseFilePath, encryptedData);
+
+                // Also save to SQLite database
+                if (_db != null)
+                {
+                    _db.SaveLicense(
+                        _currentLicense.LicenseKey,
+                        _currentLicense.IsTrial ? "Trial" : GetCurrentTier().ToString(),
+                        _currentLicense.IsTrial,
+                        _currentLicense.ActivatedAt,
+                        _currentLicense.ActivatedAt,
+                        _currentLicense.ExpiresAt,
+                        GetMachineId()
+                    );
+                }
+
                 _logger.Information("License saved to cache");
             }
             catch (Exception ex)
@@ -792,6 +808,160 @@ namespace SkidrowKiller.Services
         {
             if (_currentLicense?.Features == null) return false;
             return Array.Exists(_currentLicense.Features, f => f.Equals(featureName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Get the current license tier (Free/Pro/Enterprise)
+        /// </summary>
+        public LicenseTier GetCurrentTier()
+        {
+            if (_currentLicense == null || !_currentLicense.IsValid)
+                return LicenseTier.Free;
+
+            // Trial users get Enterprise tier features (to try all features)
+            if (_currentLicense.IsTrial)
+                return LicenseTier.Enterprise;
+
+            // Check for tier in features
+            if (_currentLicense.Features != null)
+            {
+                if (HasFeature("enterprise") || HasFeature("all_features") || HasFeature("tier_enterprise"))
+                    return LicenseTier.Enterprise;
+
+                if (HasFeature("pro") || HasFeature("yara_rules") || HasFeature("tier_pro"))
+                    return LicenseTier.Pro;
+            }
+
+            // Check product name for tier
+            var productName = _currentLicense.ProductName?.ToLowerInvariant() ?? "";
+            if (productName.Contains("enterprise"))
+                return LicenseTier.Enterprise;
+            if (productName.Contains("pro"))
+                return LicenseTier.Pro;
+
+            return LicenseTier.Free;
+        }
+
+        /// <summary>
+        /// Check if current tier allows a specific feature
+        /// </summary>
+        public bool IsTierFeatureAllowed(string feature)
+        {
+            var tier = GetCurrentTier();
+            return feature.ToLowerInvariant() switch
+            {
+                // Free tier features
+                "basic_scan" => true,
+                "real_time_protection" => true,
+                "quarantine" => true,
+                "backup" => true,
+                "whitelist" => true,
+                "threat_intel_basic" => true,
+
+                // Pro tier features
+                "yara_rules" => tier >= LicenseTier.Pro,
+                "deep_scan" => tier >= LicenseTier.Pro,
+                "browser_protection" => tier >= LicenseTier.Pro,
+                "system_cleanup" => tier >= LicenseTier.Pro,
+                "usb_protection" => tier >= LicenseTier.Pro,
+                "gaming_mode" => tier >= LicenseTier.Pro,
+                "ransomware_protection" => tier >= LicenseTier.Pro,
+                "scheduled_scan" => tier >= LicenseTier.Pro,
+                "threat_intel_pro" => tier >= LicenseTier.Pro,
+
+                // Enterprise tier features
+                "virustotal_api" => tier >= LicenseTier.Enterprise,
+                "threat_intel_enterprise" => tier >= LicenseTier.Enterprise,
+                "priority_support" => tier >= LicenseTier.Enterprise,
+                "custom_signatures" => tier >= LicenseTier.Enterprise,
+                "api_access" => tier >= LicenseTier.Enterprise,
+
+                _ => false
+            };
+        }
+
+        /// <summary>
+        /// Get features available for a specific tier
+        /// </summary>
+        public static LicenseTierInfo GetTierInfo(LicenseTier tier)
+        {
+            return tier switch
+            {
+                LicenseTier.Free => new LicenseTierInfo
+                {
+                    Tier = LicenseTier.Free,
+                    Name = "Free",
+                    Description = "Basic protection for personal use",
+                    Price = "Free",
+                    Features = new[]
+                    {
+                        "Basic malware scanning",
+                        "Real-time protection",
+                        "Quarantine management",
+                        "Backup before removal",
+                        "Whitelist management",
+                        "Basic threat intelligence (5 feeds)"
+                    },
+                    MaxDevices = 1,
+                    SupportLevel = "Community"
+                },
+                LicenseTier.Pro => new LicenseTierInfo
+                {
+                    Tier = LicenseTier.Pro,
+                    Name = "Pro",
+                    Description = "Advanced protection for power users",
+                    Price = "$29/year",
+                    Features = new[]
+                    {
+                        "All Free features",
+                        "YARA rules detection",
+                        "Deep file analysis",
+                        "Browser protection",
+                        "System cleanup",
+                        "USB protection",
+                        "Gaming mode",
+                        "Ransomware protection",
+                        "Scheduled scans",
+                        "Pro threat intelligence (9 feeds)",
+                        "Email support"
+                    },
+                    MaxDevices = 3,
+                    SupportLevel = "Email"
+                },
+                LicenseTier.Enterprise => new LicenseTierInfo
+                {
+                    Tier = LicenseTier.Enterprise,
+                    Name = "Enterprise",
+                    Description = "Complete protection for businesses",
+                    Price = "$99/year",
+                    Features = new[]
+                    {
+                        "All Pro features",
+                        "VirusTotal API integration",
+                        "All threat intelligence feeds (12+)",
+                        "Custom signature rules",
+                        "API access",
+                        "Priority support",
+                        "Centralized management (coming soon)"
+                    },
+                    MaxDevices = 10,
+                    SupportLevel = "Priority"
+                },
+                _ => GetTierInfo(LicenseTier.Free)
+            };
+        }
+
+        /// <summary>
+        /// Get comparison of all tiers
+        /// </summary>
+        public static List<LicenseTierInfo> GetAllTiers()
+        {
+            return new List<LicenseTierInfo>
+            {
+                GetTierInfo(LicenseTier.Free),
+                GetTierInfo(LicenseTier.Pro),
+                GetTierInfo(LicenseTier.Enterprise)
+            };
         }
 
         #endregion
@@ -962,6 +1132,40 @@ namespace SkidrowKiller.Services
 
         [JsonPropertyName("status")]
         public string? Status { get; set; }
+    }
+
+    /// <summary>
+    /// License tier levels
+    /// </summary>
+    public enum LicenseTier
+    {
+        Free = 0,
+        Pro = 1,
+        Enterprise = 2
+    }
+
+    /// <summary>
+    /// Information about a license tier
+    /// </summary>
+    public class LicenseTierInfo
+    {
+        public LicenseTier Tier { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Price { get; set; } = string.Empty;
+        public string[] Features { get; set; } = Array.Empty<string>();
+        public int MaxDevices { get; set; }
+        public string SupportLevel { get; set; } = string.Empty;
+
+        public string TierDisplay => Tier switch
+        {
+            LicenseTier.Free => "Free",
+            LicenseTier.Pro => "Pro",
+            LicenseTier.Enterprise => "Enterprise",
+            _ => "Unknown"
+        };
+
+        public bool IsRecommended => Tier == LicenseTier.Pro;
     }
 
     #endregion

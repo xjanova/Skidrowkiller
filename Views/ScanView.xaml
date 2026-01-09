@@ -355,7 +355,8 @@
                          x:Name="LogTextBox"
                          Style="{StaticResource LogTextBoxStyle}"
                          VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"/>
+                         HorizontalScrollBarVisibility="Disabled"
+                         TextWrapping="Wrap"/>
             </Grid>
         </Border>
 

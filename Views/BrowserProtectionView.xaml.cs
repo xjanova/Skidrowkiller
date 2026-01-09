@@ -78,7 +78,7 @@ namespace SkidrowKiller.Views
                 // Browser header
                 var browserHeader = new Border
                 {
-                    Background = (Brush)FindResource("BackgroundLightBrush"),
+                    Background = (Brush)FindResource("BgTertiaryBrush"),
                     CornerRadius = new CornerRadius(4),
                     Padding = new Thickness(12, 8, 12, 8),
                     Margin = new Thickness(0, 0, 0, 8)
@@ -129,7 +129,7 @@ namespace SkidrowKiller.Views
                 {
                     var safeItem = new Border
                     {
-                        Background = (Brush)FindResource("CardBrush"),
+                        Background = (Brush)FindResource("BgCardBrush"),
                         BorderBrush = (Brush)FindResource("SuccessBrush"),
                         BorderThickness = new Thickness(1),
                         CornerRadius = new CornerRadius(4),
@@ -160,7 +160,7 @@ namespace SkidrowKiller.Views
         {
             var item = new Border
             {
-                Background = (Brush)FindResource("CardBrush"),
+                Background = (Brush)FindResource("BgCardBrush"),
                 BorderBrush = isMalicious
                     ? (Brush)FindResource("DangerBrush")
                     : (Brush)FindResource("WarningBrush"),

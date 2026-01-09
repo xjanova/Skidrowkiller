@@ -37,6 +37,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="40"/>
                 <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Title Bar -->
@@ -69,11 +70,7 @@
                                    Margin="4,0,0,0"/>
                     </StackPanel>
 
-                    <!-- Status Indicator -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <Ellipse x:Name="StatusIndicator" Width="8" Height="8" Fill="{StaticResource SuccessBrush}" Margin="0,0,8,0"/>
-                        <TextBlock x:Name="StatusText" Text="Protected" Foreground="{StaticResource SuccessBrush}" FontSize="12"/>
-                    </StackPanel>
+                    <!-- Title Bar is now clean - Protection status moved to Status Bar -->
 
                     <!-- Window Buttons -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal">
@@ -190,6 +187,34 @@
                                     </StackPanel>
                                 </Button>
 
+                                <Button x:Name="NavUsb" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Usb">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🔌" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="USB Protection" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="NavRansomware" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Ransomware">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🛡️" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Ransomware" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="NavScheduled" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Scheduled">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="📅" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Scheduled Scans" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <Button x:Name="NavGaming" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Gaming">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🎮" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Gaming Mode" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <Button x:Name="NavThreats" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="Threats">
                                     <StackPanel Orientation="Horizontal">
                                         <Path Data="{StaticResource WarningIcon}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="18" Height="18" Stretch="Uniform" Margin="0,0,12,0"/>
@@ -232,6 +257,13 @@
                                         </LinearGradientBrush>
                                     </Rectangle.Fill>
                                 </Rectangle>
+
+                                <Button x:Name="NavThreatIntel" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="ThreatIntel">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="🛡️" FontSize="16" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Threat Intel" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
 
                                 <Button x:Name="NavLicense" Style="{StaticResource NavButtonStyle}" Click="NavButton_Click" Tag="License">
                                     <StackPanel Orientation="Horizontal">
@@ -383,13 +415,153 @@
 
                         <!-- Main Content Frame with ScrollViewer -->
                         <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
                                       Style="{StaticResource ModernScrollViewerStyle}">
                             <Frame x:Name="MainFrame" NavigationUIVisibility="Hidden" Background="Transparent"/>
                         </ScrollViewer>
                     </Grid>
                 </Border>
             </Grid>
+
+            <!-- Status Bar -->
+            <Border Grid.Row="2" Background="{StaticResource BgSecondaryBrush}"
+                    CornerRadius="0,0,12,12" Padding="8,6">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Connection & License -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                        <!-- Connection Status -->
+                        <Border Background="#15ffffff" CornerRadius="4" Padding="6,3" Margin="0,0,6,0" ToolTip="Internet Connection">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse x:Name="ConnectionIndicator" Width="6" Height="6"
+                                         Fill="{StaticResource SuccessBrush}" Margin="0,0,4,0"/>
+                                <TextBlock x:Name="ConnectionStatusText" Text="Online"
+                                           Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- License Status -->
+                        <Border Background="#15ffffff" CornerRadius="4" Padding="6,3" Margin="0,0,6,0" ToolTip="License Status">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="10" Height="10" Stretch="Uniform" Margin="0,0,4,0"
+                                      Fill="{StaticResource AccentPrimaryBrush}"
+                                      Data="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1Z"/>
+                                <TextBlock x:Name="LicenseStatusText" Text="Free"
+                                           Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                           Foreground="{StaticResource TextSecondaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Threat Intel Stats -->
+                        <Border Background="#15ffffff" CornerRadius="4" Padding="6,3" ToolTip="Threat Intelligence Database">
+                            <StackPanel Orientation="Horizontal">
+                                <Path Width="10" Height="10" Stretch="Uniform" Margin="0,0,4,0"
+                                      Fill="{StaticResource CyanPrimaryBrush}"
+                                      Data="M12,3C7.58,3 4,4.79 4,7V17C4,19.21 7.59,21 12,21C16.41,21 20,19.21 20,17V7C20,4.79 16.42,3 12,3Z"/>
+                                <TextBlock x:Name="ThreatIntelHashCount" Text="0"
+                                           Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                           Foreground="{StaticResource CyanPrimaryBrush}" FontWeight="SemiBold"/>
+                                <TextBlock Text=" IOCs" Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                           Foreground="{StaticResource TextTertiaryBrush}"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Protection Services Status Icons -->
+                    <Border Grid.Column="1" Background="#10ffffff" CornerRadius="4" Padding="8,3" Margin="12,0,0,0"
+                            ToolTip="Protection Services Status">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Protection:" Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                       Foreground="{StaticResource TextTertiaryBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+
+                            <!-- Real-time Protection -->
+                            <Border x:Name="StatusRealtime" Background="#20808080" CornerRadius="3" Padding="4,2" Margin="0,0,4,0"
+                                    ToolTip="Real-time Protection: OFF">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusRealtimeIndicator" Width="6" Height="6" Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="StatusRealtimeText" Text="RT" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- USB Protection -->
+                            <Border x:Name="StatusUsb" Background="#20808080" CornerRadius="3" Padding="4,2" Margin="0,0,4,0"
+                                    ToolTip="USB Protection: OFF">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusUsbIndicator" Width="6" Height="6" Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="StatusUsbText" Text="USB" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Ransomware Protection -->
+                            <Border x:Name="StatusRansomware" Background="#20808080" CornerRadius="3" Padding="4,2" Margin="0,0,4,0"
+                                    ToolTip="Ransomware Protection: OFF">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusRansomwareIndicator" Width="6" Height="6" Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="StatusRansomwareText" Text="RW" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Browser Protection -->
+                            <Border x:Name="StatusBrowser" Background="#20808080" CornerRadius="3" Padding="4,2" Margin="0,0,4,0"
+                                    ToolTip="Browser Protection: OFF">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusBrowserIndicator" Width="6" Height="6" Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="StatusBrowserText" Text="WEB" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Gaming Mode -->
+                            <Border x:Name="StatusGaming" Background="#20808080" CornerRadius="3" Padding="4,2"
+                                    ToolTip="Gaming Mode: OFF">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="StatusGamingIndicator" Width="6" Height="6" Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,3,0"/>
+                                    <TextBlock x:Name="StatusGamingText" Text="GAME" FontSize="9" FontWeight="SemiBold"
+                                               Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Spacer / Status Message -->
+                    <TextBlock x:Name="StatusBarMessage" Grid.Column="2" Text=""
+                               Style="{StaticResource BodyTextStyle}" FontSize="10"
+                               Foreground="{StaticResource TextTertiaryBrush}"
+                               VerticalAlignment="Center" Margin="12,0,0,0"/>
+
+                    <!-- Overall Protection Status -->
+                    <Border Grid.Column="3" Background="#15ffffff" CornerRadius="4" Padding="8,3" Margin="0,0,8,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse x:Name="ProtectionIndicator" Width="8" Height="8"
+                                     Fill="{StaticResource TextTertiaryBrush}" Margin="0,0,6,0"/>
+                            <TextBlock x:Name="ProtectionStatusText" Text="Not Protected"
+                                       Style="{StaticResource BodyTextStyle}" FontSize="10" FontWeight="SemiBold"
+                                       Foreground="{StaticResource TextSecondaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Time -->
+                    <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Path Width="10" Height="10" Stretch="Uniform" Margin="0,0,4,0"
+                              Fill="{StaticResource TextTertiaryBrush}"
+                              Data="M12,20A8,8 0 0,0 20,12A8,8 0 0,0 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20M12,2A10,10 0 0,1 22,12A10,10 0 0,1 12,22C6.47,22 2,17.5 2,12A10,10 0 0,1 12,2M12.5,7V12.25L17,14.92L16.25,16.15L11,13V7H12.5Z"/>
+                        <TextBlock x:Name="CurrentTimeText" Text="--:--:--"
+                                   Style="{StaticResource BodyTextStyle}" FontSize="10"
+                                   Foreground="{StaticResource TextTertiaryBrush}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Border>
 </Window>

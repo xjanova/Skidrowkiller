@@ -21,6 +21,7 @@ namespace SkidrowKiller.Services
         private readonly ConcurrentDictionary<string, int> _processModificationCount = new();
         private readonly HashSet<string> _protectedFolders = new();
         private readonly HashSet<string> _trustedProcesses = new();
+        private readonly SettingsDatabase? _db;
         private readonly string _configPath;
         private readonly string _honeypotFolder;
         private CancellationTokenSource? _cts;
@@ -70,8 +71,10 @@ namespace SkidrowKiller.Services
         public bool IsEnabled => _isEnabled;
         public IReadOnlySet<string> ProtectedFolders => _protectedFolders;
 
-        public RansomwareProtectionService()
+        public RansomwareProtectionService(SettingsDatabase? db = null)
         {
+            _db = db;
+
             var appData = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "SkidrowKiller"
@@ -149,6 +152,9 @@ namespace SkidrowKiller.Services
                 {
                     SetupWatcherForFolder(path);
                 }
+
+                // Save to SQLite
+                _db?.AddProtectedFolder(path);
                 SaveConfig();
                 RaiseLog($"📁 Protected folder added: {path}");
             }
@@ -157,6 +163,8 @@ namespace SkidrowKiller.Services
         public void RemoveProtectedFolder(string path)
         {
             _protectedFolders.Remove(path);
+            // Remove from SQLite
+            _db?.RemoveProtectedFolder(path);
             SaveConfig();
             RaiseLog($"📁 Protected folder removed: {path}");
         }
@@ -501,6 +509,20 @@ namespace SkidrowKiller.Services
         {
             try
             {
+                // First try to load from SQLite database
+                if (_db != null)
+                {
+                    var folders = _db.GetProtectedFolders();
+                    foreach (var folder in folders)
+                    {
+                        if (Directory.Exists(folder))
+                        {
+                            _protectedFolders.Add(folder);
+                        }
+                    }
+                }
+
+                // Fallback/migrate from JSON config
                 if (File.Exists(_configPath))
                 {
                     var json = File.ReadAllText(_configPath);
@@ -509,9 +531,11 @@ namespace SkidrowKiller.Services
                     {
                         foreach (var folder in config.ProtectedFolders)
                         {
-                            if (Directory.Exists(folder))
+                            if (Directory.Exists(folder) && !_protectedFolders.Contains(folder))
                             {
                                 _protectedFolders.Add(folder);
+                                // Migrate to SQLite
+                                _db?.AddProtectedFolder(folder);
                             }
                         }
                         foreach (var proc in config.TrustedProcesses)

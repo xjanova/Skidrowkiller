@@ -241,14 +241,14 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Trial/Demo Section -->
-                <Border Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
+                <!-- Trial/Demo Section - Hidden when already on trial -->
+                <Border x:Name="TrialSection" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
                     <StackPanel>
                         <TextBlock Text="Trial Version"
                                    Style="{StaticResource SubHeaderTextStyle}"
                                    Margin="0,0,0,12"/>
 
-                        <TextBlock Text="Try Skidrow Killer free for 7 days with limited features."
+                        <TextBlock Text="Try Skidrow Killer free for 7 days with ALL Enterprise features unlocked!"
                                    Style="{StaticResource BodyTextStyle}"
                                    Opacity="0.8"
                                    Margin="0,0,0,12"/>
@@ -262,63 +262,153 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Features Comparison -->
+                <!-- Features Comparison - 3 Tiers -->
                 <Border Style="{StaticResource GlassCardStyle}">
                     <StackPanel>
-                        <TextBlock Text="Features Comparison"
+                        <TextBlock Text="License Tiers Comparison"
                                    Style="{StaticResource SubHeaderTextStyle}"
                                    Margin="0,0,0,16"/>
 
-                        <Grid>
+                        <!-- Tier Headers -->
+                        <Grid Margin="0,0,0,16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="100"/>
-                                <ColumnDefinition Width="100"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="120"/>
                             </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="Auto"/>
-                            </Grid.RowDefinitions>
 
-                            <!-- Header -->
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Feature" FontWeight="SemiBold" Margin="0,0,0,12"/>
-                            <TextBlock Grid.Row="0" Grid.Column="1" Text="Trial" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Pro" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,0,0,12"/>
+                            <TextBlock Grid.Column="0" Text="Feature" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
 
-                            <!-- Basic Scan -->
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Basic Malware Scan" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="1" Grid.Column="1" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                            <!-- Free Tier -->
+                            <Border Grid.Column="1" Background="{StaticResource BgTertiaryBrush}" CornerRadius="6" Padding="8,6" Margin="4,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="FREE" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="$0" FontSize="10" HorizontalAlignment="Center"
+                                               Foreground="{StaticResource TextSecondaryBrush}"/>
+                                </StackPanel>
+                            </Border>
 
-                            <!-- Real-time Protection -->
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Real-time Protection" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="2" Grid.Column="1" Text="Limited" HorizontalAlignment="Center" Foreground="{StaticResource WarningBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="2" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                            <!-- Pro Tier -->
+                            <Border Grid.Column="2" Background="{StaticResource AccentPrimaryBrush}" CornerRadius="6" Padding="8,6" Margin="4,0">
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="PRO" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" Foreground="White"/>
+                                    <TextBlock Text="$29/yr" FontSize="10" HorizontalAlignment="Center" Foreground="#CCFFFFFF"/>
+                                </StackPanel>
+                            </Border>
 
-                            <!-- Auto Quarantine -->
-                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Auto Quarantine" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="3" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="3" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                            <!-- Enterprise Tier -->
+                            <Border Grid.Column="3" CornerRadius="6" Padding="8,6" Margin="4,0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#FFD700" Offset="0"/>
+                                        <GradientStop Color="#FFA500" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <StackPanel HorizontalAlignment="Center">
+                                    <TextBlock Text="ENTERPRISE" FontWeight="Bold" FontSize="12" HorizontalAlignment="Center" Foreground="#1a1a2e"/>
+                                    <TextBlock Text="$99/yr" FontSize="10" HorizontalAlignment="Center" Foreground="#1a1a2e"/>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
 
-                            <!-- Registry Monitoring -->
-                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Registry Monitoring" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="4" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="4" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                        <!-- Feature List -->
+                        <ItemsControl x:Name="FeaturesList">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource BgSecondaryBrush}" CornerRadius="4" Padding="12,10" Margin="0,0,0,4">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="120"/>
+                                            </Grid.ColumnDefinitions>
 
-                            <!-- Auto Updates -->
-                            <TextBlock Grid.Row="5" Grid.Column="0" Text="Automatic Updates" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="5" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="5" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" Style="{StaticResource BodyTextStyle}"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding FreeStatus}" HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding ProStatus}" HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding EnterpriseStatus}" HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                            <!-- Priority Support -->
-                            <TextBlock Grid.Row="6" Grid.Column="0" Text="Priority Support" Style="{StaticResource BodyTextStyle}" Margin="0,8"/>
-                            <TextBlock Grid.Row="6" Grid.Column="1" Text="✗" HorizontalAlignment="Center" Foreground="{StaticResource DangerBrush}" Margin="0,8"/>
-                            <TextBlock Grid.Row="6" Grid.Column="2" Text="✓" HorizontalAlignment="Center" Foreground="{StaticResource GreenPrimaryBrush}" Margin="0,8"/>
+                        <!-- Tier Details -->
+                        <Grid Margin="0,20,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Free Details -->
+                            <Border Grid.Column="0" Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,8,0">
+                                <StackPanel>
+                                    <TextBlock Text="Free" FontWeight="Bold" FontSize="16" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                    <TextBlock Text="Basic protection" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,8"/>
+                                    <TextBlock Text="1 device" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="5 threat intel feeds" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="Community support" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Pro Details -->
+                            <Border Grid.Column="1" CornerRadius="8" Padding="16" Margin="4,0,4,0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1a7c3aed" Offset="0"/>
+                                        <GradientStop Color="#107c3aed" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <SolidColorBrush Color="#7c3aed" Opacity="0.3"/>
+                                </Border.BorderBrush>
+                                <Border.BorderThickness>
+                                    <Thickness>1</Thickness>
+                                </Border.BorderThickness>
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Pro" FontWeight="Bold" FontSize="16" Foreground="{StaticResource AccentPrimaryBrush}"/>
+                                        <Border Background="{StaticResource AccentPrimaryBrush}" CornerRadius="3" Padding="6,2" Margin="8,0,0,0">
+                                            <TextBlock Text="RECOMMENDED" FontSize="8" FontWeight="Bold" Foreground="White"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="Advanced protection" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,8"/>
+                                    <TextBlock Text="3 devices" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="9 threat intel feeds" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="Email support" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Enterprise Details -->
+                            <Border Grid.Column="2" CornerRadius="8" Padding="16" Margin="8,0,0,0">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                        <GradientStop Color="#1aFFD700" Offset="0"/>
+                                        <GradientStop Color="#10FFA500" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <Border.BorderBrush>
+                                    <SolidColorBrush Color="#FFD700" Opacity="0.3"/>
+                                </Border.BorderBrush>
+                                <Border.BorderThickness>
+                                    <Thickness>1</Thickness>
+                                </Border.BorderThickness>
+                                <StackPanel>
+                                    <TextBlock Text="Enterprise" FontWeight="Bold" FontSize="16" Foreground="#FFD700"/>
+                                    <TextBlock Text="Complete protection" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,8"/>
+                                    <TextBlock Text="10 devices" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="12+ threat intel feeds" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                    <TextBlock Text="Priority support" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                </StackPanel>
+                            </Border>
                         </Grid>
                     </StackPanel>
                 </Border>

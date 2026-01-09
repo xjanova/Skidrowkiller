@@ -420,6 +420,9 @@ namespace SkidrowKiller.Views
 
             StatusLabel.Text = $"Starting {modeDescription}...";
 
+            // Auto-scroll to log section so user can see scan progress immediately
+            LogTextBox.BringIntoView();
+
             // Determine scan parameters based on mode
             bool scanFiles, scanRegistry, scanProcesses;
             if (scanMode == ScanMode.Quick)

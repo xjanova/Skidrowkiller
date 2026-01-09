@@ -14,21 +14,22 @@ namespace SkidrowKiller.Views
     public partial class SettingsView : Page
     {
         private readonly ILogger _logger;
-        private readonly string _settingsPath;
+        private readonly SettingsDatabase _settingsDb;
         private readonly DatabaseService _databaseService;
+        private ThreatIntelligenceService? _threatIntelService;
+        private LicenseService? _licenseService;
         private UserSettings _settings;
         private bool _isLoading = true;
         private bool _hasChanges;
 
-        public SettingsView()
+        // Event to request navigation to ThreatIntelligenceView
+        public event EventHandler? NavigateToThreatIntelRequested;
+
+        public SettingsView(SettingsDatabase settingsDb)
         {
             InitializeComponent();
             _logger = LoggingService.ForContext<SettingsView>();
-            _settingsPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "SkidrowKiller",
-                "user_settings.json"
-            );
+            _settingsDb = settingsDb;
 
             _databaseService = new DatabaseService();
             _databaseService.UpdateProgress += DatabaseService_UpdateProgress;
@@ -39,48 +40,166 @@ namespace SkidrowKiller.Views
             UpdatePaths();
             UpdateVersionInfo();
             UpdateDatabaseInfo();
+            UpdateThreatIntelInfo();
 
             _isLoading = false;
+        }
+
+        /// <summary>
+        /// Inject the shared ThreatIntelligenceService and LicenseService
+        /// </summary>
+        public void SetServices(ThreatIntelligenceService? threatIntel, LicenseService? license)
+        {
+            _threatIntelService = threatIntel;
+            _licenseService = license;
+
+            if (_threatIntelService != null)
+            {
+                _threatIntelService.UpdateCompleted += ThreatIntel_UpdateCompleted;
+                _threatIntelService.ProgressChanged += ThreatIntel_ProgressChanged;
+            }
+
+            UpdateThreatIntelInfo();
         }
 
         private UserSettings LoadSettings()
         {
             try
             {
-                if (File.Exists(_settingsPath))
+                // Load settings from SQLite database
+                return new UserSettings
                 {
-                    var json = File.ReadAllText(_settingsPath);
-                    return JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
-                }
+                    // General
+                    StartWithWindows = _settingsDb.GetSetting<bool>("StartWithWindows", false),
+                    StartMinimized = _settingsDb.GetSetting<bool>("StartMinimized", false),
+                    CheckForUpdates = _settingsDb.GetSetting<bool>("CheckForUpdates", true),
+
+                    // Real-time Protection
+                    RealtimeProtection = _settingsDb.GetSetting<bool>("RealtimeProtection", true),
+                    MonitorProcesses = _settingsDb.GetSetting<bool>("MonitorProcesses", true),
+                    MonitorNetwork = _settingsDb.GetSetting<bool>("MonitorNetwork", true),
+                    ShowNotifications = _settingsDb.GetSetting<bool>("ShowNotifications", true),
+
+                    // Scanning
+                    ScanFiles = _settingsDb.GetSetting<bool>("ScanFiles", true),
+                    ScanRegistry = _settingsDb.GetSetting<bool>("ScanRegistry", true),
+                    ScanProcesses = _settingsDb.GetSetting<bool>("ScanProcesses", true),
+                    ScanNetworkDrives = _settingsDb.GetSetting<bool>("ScanNetworkDrives", false),
+
+                    // Threat Actions
+                    ThreatAction = _settingsDb.GetSetting<int>("ThreatAction", 0),
+                    BackupBeforeDelete = _settingsDb.GetSetting<bool>("BackupBeforeDelete", true),
+                    QuarantineOnly = _settingsDb.GetSetting<bool>("QuarantineOnly", false),
+                    SensitivityLevel = _settingsDb.GetSetting<int>("SensitivityLevel", 1),
+
+                    // Backup & Quarantine
+                    BackupRetentionIndex = _settingsDb.GetSetting<int>("BackupRetentionIndex", 2),
+                    MaxBackupSizeIndex = _settingsDb.GetSetting<int>("MaxBackupSizeIndex", 1),
+
+                    // Logging
+                    EnableLogging = _settingsDb.GetSetting<bool>("EnableLogging", true),
+                    LogLevelIndex = _settingsDb.GetSetting<int>("LogLevelIndex", 1),
+
+                    // Database & Updates
+                    AutoUpdateDatabase = _settingsDb.GetSetting<bool>("AutoUpdateDatabase", true),
+                    UpdateFrequencyIndex = _settingsDb.GetSetting<int>("UpdateFrequencyIndex", 1),
+
+                    // Gaming Mode
+                    GamingModeEnabled = _settingsDb.GetSetting<bool>("GamingModeEnabled", false),
+                    AutoDetectGames = _settingsDb.GetSetting<bool>("AutoDetectGames", true),
+                    SuppressGamingNotifications = _settingsDb.GetSetting<bool>("SuppressGamingNotifications", true),
+
+                    // USB Protection
+                    AutoScanUsb = _settingsDb.GetSetting<bool>("AutoScanUsb", true),
+                    BlockAutorun = _settingsDb.GetSetting<bool>("BlockAutorun", true),
+
+                    // Ransomware Protection
+                    RansomwareProtection = _settingsDb.GetSetting<bool>("RansomwareProtection", true),
+                    HoneypotFiles = _settingsDb.GetSetting<bool>("HoneypotFiles", true),
+
+                    // Scheduled Scans
+                    ScheduledScansEnabled = _settingsDb.GetSetting<bool>("ScheduledScansEnabled", false),
+
+                    // Startup Services
+                    StartupRealtimeProtection = _settingsDb.GetSetting<bool>("StartupRealtimeProtection", true),
+                    StartupGamingMode = _settingsDb.GetSetting<bool>("StartupGamingMode", true),
+                    StartupUsbProtection = _settingsDb.GetSetting<bool>("StartupUsbProtection", true),
+                    StartupRansomwareProtection = _settingsDb.GetSetting<bool>("StartupRansomwareProtection", true),
+                    StartupScheduledScans = _settingsDb.GetSetting<bool>("StartupScheduledScans", false),
+                    StartupSelfProtection = _settingsDb.GetSetting<bool>("StartupSelfProtection", true)
+                };
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to load user settings");
+                _logger.Error(ex, "Failed to load user settings from SQLite");
+                return new UserSettings();
             }
-            return new UserSettings();
         }
 
         private void SaveSettingsToFile()
         {
             try
             {
-                var directory = Path.GetDirectoryName(_settingsPath);
-                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                {
-                    Directory.CreateDirectory(directory);
-                }
+                // Save all settings to SQLite database
+                _settingsDb.SetSetting("StartWithWindows", _settings.StartWithWindows, "general");
+                _settingsDb.SetSetting("StartMinimized", _settings.StartMinimized, "general");
+                _settingsDb.SetSetting("CheckForUpdates", _settings.CheckForUpdates, "general");
 
-                var json = JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(_settingsPath, json);
+                _settingsDb.SetSetting("RealtimeProtection", _settings.RealtimeProtection, "protection");
+                _settingsDb.SetSetting("MonitorProcesses", _settings.MonitorProcesses, "protection");
+                _settingsDb.SetSetting("MonitorNetwork", _settings.MonitorNetwork, "protection");
+                _settingsDb.SetSetting("ShowNotifications", _settings.ShowNotifications, "protection");
+
+                _settingsDb.SetSetting("ScanFiles", _settings.ScanFiles, "scanning");
+                _settingsDb.SetSetting("ScanRegistry", _settings.ScanRegistry, "scanning");
+                _settingsDb.SetSetting("ScanProcesses", _settings.ScanProcesses, "scanning");
+                _settingsDb.SetSetting("ScanNetworkDrives", _settings.ScanNetworkDrives, "scanning");
+
+                _settingsDb.SetSetting("ThreatAction", _settings.ThreatAction, "threats");
+                _settingsDb.SetSetting("BackupBeforeDelete", _settings.BackupBeforeDelete, "threats");
+                _settingsDb.SetSetting("QuarantineOnly", _settings.QuarantineOnly, "threats");
+                _settingsDb.SetSetting("SensitivityLevel", _settings.SensitivityLevel, "threats");
+
+                _settingsDb.SetSetting("BackupRetentionIndex", _settings.BackupRetentionIndex, "backup");
+                _settingsDb.SetSetting("MaxBackupSizeIndex", _settings.MaxBackupSizeIndex, "backup");
+
+                _settingsDb.SetSetting("EnableLogging", _settings.EnableLogging, "logging");
+                _settingsDb.SetSetting("LogLevelIndex", _settings.LogLevelIndex, "logging");
+
+                _settingsDb.SetSetting("AutoUpdateDatabase", _settings.AutoUpdateDatabase, "updates");
+                _settingsDb.SetSetting("UpdateFrequencyIndex", _settings.UpdateFrequencyIndex, "updates");
+
+                _settingsDb.SetSetting("GamingModeEnabled", _settings.GamingModeEnabled, "gaming");
+                _settingsDb.SetSetting("AutoDetectGames", _settings.AutoDetectGames, "gaming");
+                _settingsDb.SetSetting("SuppressGamingNotifications", _settings.SuppressGamingNotifications, "gaming");
+
+                // USB Protection
+                _settingsDb.SetSetting("AutoScanUsb", _settings.AutoScanUsb, "usb");
+                _settingsDb.SetSetting("BlockAutorun", _settings.BlockAutorun, "usb");
+
+                // Ransomware Protection
+                _settingsDb.SetSetting("RansomwareProtection", _settings.RansomwareProtection, "ransomware");
+                _settingsDb.SetSetting("HoneypotFiles", _settings.HoneypotFiles, "ransomware");
+
+                // Scheduled Scans
+                _settingsDb.SetSetting("ScheduledScansEnabled", _settings.ScheduledScansEnabled, "scanning");
+
+                // Startup Services
+                _settingsDb.SetSetting("StartupRealtimeProtection", _settings.StartupRealtimeProtection, "startup");
+                _settingsDb.SetSetting("StartupGamingMode", _settings.StartupGamingMode, "startup");
+                _settingsDb.SetSetting("StartupUsbProtection", _settings.StartupUsbProtection, "startup");
+                _settingsDb.SetSetting("StartupRansomwareProtection", _settings.StartupRansomwareProtection, "startup");
+                _settingsDb.SetSetting("StartupScheduledScans", _settings.StartupScheduledScans, "startup");
+                _settingsDb.SetSetting("StartupSelfProtection", _settings.StartupSelfProtection, "startup");
 
                 // Apply startup setting
                 ApplyStartupSetting();
 
-                _logger.Information("Settings saved successfully");
+                _logger.Information("Settings saved to SQLite successfully");
             }
             catch (Exception ex)
             {
-                _logger.Error(ex, "Failed to save user settings");
+                _logger.Error(ex, "Failed to save user settings to SQLite");
                 throw;
             }
         }
@@ -398,12 +517,114 @@ namespace SkidrowKiller.Views
 
         private void UpdateDatabaseInfo()
         {
+            // Legacy database info - now primarily uses ThreatIntelligenceService
             var info = _databaseService.CurrentInfo;
-            TxtDbVersion.Text = info.Version;
-            TxtDbLastUpdate.Text = _databaseService.GetFormattedLastUpdate();
-            TxtDbSignatures.Text = _databaseService.GetFormattedSignatureCount();
-
             UpdateDatabaseStatus(info.Status);
+        }
+
+        private void UpdateThreatIntelInfo()
+        {
+            if (_threatIntelService == null)
+            {
+                // Show default values when service not injected
+                TxtDbHashes.Text = "0";
+                TxtDbUrls.Text = "0";
+                TxtDbIPs.Text = "0";
+                TxtDbYara.Text = "0";
+                TxtDbLastUpdate.Text = "Last updated: Never";
+                TxtCurrentTier.Text = "Free";
+                TxtAvailableFeeds.Text = " (5/12 feeds)";
+                return;
+            }
+
+            var stats = _threatIntelService.Stats;
+            TxtDbHashes.Text = stats.TotalHashes.ToString("N0");
+            TxtDbUrls.Text = stats.TotalUrls.ToString("N0");
+            TxtDbIPs.Text = stats.TotalIPs.ToString("N0");
+            TxtDbYara.Text = stats.TotalYaraRules.ToString("N0");
+
+            // Last update
+            if (_threatIntelService.LastUpdate != DateTime.MinValue)
+            {
+                TxtDbLastUpdate.Text = $"Last updated: {_threatIntelService.LastUpdate:g}";
+            }
+            else
+            {
+                TxtDbLastUpdate.Text = "Last updated: Never";
+            }
+
+            // Tier info
+            var tier = _licenseService?.GetCurrentTier() ?? LicenseTier.Free;
+            var isTrial = _licenseService?.IsTrial ?? false;
+            var allFeeds = _threatIntelService.GetFeeds();
+            var availableFeeds = _threatIntelService.GetFeedsForTier(tier);
+
+            // Show tier name with (TRIAL) suffix if on trial
+            var tierName = tier switch
+            {
+                LicenseTier.Free => "Free",
+                LicenseTier.Pro => "Pro",
+                LicenseTier.Enterprise => "Enterprise",
+                _ => "Free"
+            };
+            TxtCurrentTier.Text = isTrial ? $"{tierName} (TRIAL)" : tierName;
+
+            // Update tier badge color - gold for Enterprise, orange tint for Trial
+            TierBadge.Background = tier switch
+            {
+                LicenseTier.Free => (System.Windows.Media.Brush)FindResource("TextTertiaryBrush"),
+                LicenseTier.Pro => (System.Windows.Media.Brush)FindResource("AccentPrimaryBrush"),
+                LicenseTier.Enterprise => isTrial
+                    ? (System.Windows.Media.Brush)FindResource("WarningBrush") // Orange for trial
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 215, 0)), // Gold for paid
+                _ => (System.Windows.Media.Brush)FindResource("TextTertiaryBrush")
+            };
+
+            TxtAvailableFeeds.Text = $" ({availableFeeds.Count}/{allFeeds.Count} feeds)";
+
+            // Update status based on data
+            if (stats.TotalHashes > 0 || stats.TotalUrls > 0)
+            {
+                TxtDbStatus.Text = "Threat database loaded";
+                TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M12,2C6.48,2 2,6.48 2,12C2,17.52 6.48,22 12,22C17.52,22 22,17.52 22,12C22,6.48 17.52,2 12,2M10,17L5,12L6.41,10.59L10,14.17L17.59,6.58L19,8L10,17Z");
+            }
+            else
+            {
+                TxtDbStatus.Text = "Click 'Update All' to download threat intelligence";
+                TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("TextSecondaryBrush");
+                DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("TextSecondaryBrush");
+                DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M13,13H11V7H13M13,17H11V15H13M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z");
+            }
+        }
+
+        private void ThreatIntel_ProgressChanged(object? sender, ThreatIntelProgressEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                TxtDbStatus.Text = $"{e.Status} ({e.PercentComplete}%)";
+                TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("CyanPrimaryBrush");
+            });
+        }
+
+        private void ThreatIntel_UpdateCompleted(object? sender, ThreatIntelCompleteEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                UpdateThreatIntelInfo();
+
+                if (e.Result.Success)
+                {
+                    TxtDbStatus.Text = $"Updated! +{e.Result.NewHashes:N0} hashes, +{e.Result.NewUrls:N0} URLs";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                }
+                else
+                {
+                    TxtDbStatus.Text = $"Update completed with {e.Result.FeedsFailed} errors";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("WarningBrush");
+                }
+            });
         }
 
         private void UpdateDatabaseStatus(DatabaseStatus status)
@@ -449,28 +670,45 @@ namespace SkidrowKiller.Views
 
             try
             {
-                UpdateDatabaseStatus(DatabaseStatus.Updating);
-
-                // Try real API update first, fallback to local simulation if offline
-                var result = await _databaseService.UpdateDatabaseAsync();
-
-                if (result.Success)
+                // Use ThreatIntelligenceService if available
+                if (_threatIntelService != null)
                 {
-                    UpdateDatabaseInfo();
-                    TxtDbStatus.Text = result.Message ?? "Database updated successfully";
-                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                    var tier = _licenseService?.GetCurrentTier() ?? LicenseTier.Free;
+
+                    TxtDbStatus.Text = "Updating threat intelligence...";
+                    TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("CyanPrimaryBrush");
+                    DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("CyanPrimaryBrush");
+                    DbStatusIcon.Data = System.Windows.Media.Geometry.Parse("M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z");
+
+                    await _threatIntelService.UpdateAllAsync(tier);
+
+                    // UpdateThreatIntelInfo will be called by ThreatIntel_UpdateCompleted event
                 }
                 else
                 {
-                    UpdateDatabaseStatus(DatabaseStatus.Error);
-                    TxtDbStatus.Text = result.Message ?? "Update failed";
+                    // Fallback to legacy database service
+                    UpdateDatabaseStatus(DatabaseStatus.Updating);
+                    var result = await _databaseService.UpdateDatabaseAsync();
+
+                    if (result.Success)
+                    {
+                        UpdateDatabaseInfo();
+                        TxtDbStatus.Text = result.Message ?? "Database updated successfully";
+                        TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("GreenPrimaryBrush");
+                    }
+                    else
+                    {
+                        UpdateDatabaseStatus(DatabaseStatus.Error);
+                        TxtDbStatus.Text = result.Message ?? "Update failed";
+                    }
                 }
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Database update failed");
-                UpdateDatabaseStatus(DatabaseStatus.Error);
                 TxtDbStatus.Text = $"Error: {ex.Message}";
+                TxtDbStatus.Foreground = (System.Windows.Media.Brush)FindResource("DangerBrush");
+                DbStatusIcon.Fill = (System.Windows.Media.Brush)FindResource("DangerBrush");
             }
             finally
             {
@@ -492,6 +730,12 @@ namespace SkidrowKiller.Views
             {
                 UpdateDatabaseInfo();
             });
+        }
+
+        private void ManageThreatIntel_Click(object sender, RoutedEventArgs e)
+        {
+            // Request navigation to ThreatIntelligenceView
+            NavigateToThreatIntelRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void ManageProtectedFolders_Click(object sender, RoutedEventArgs e)

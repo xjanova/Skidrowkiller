@@ -3,110 +3,101 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BgPrimaryBrush}">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <Grid Margin="24">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+    <StackPanel Margin="24">
+        <!-- Header -->
+        <StackPanel Margin="0,0,0,20">
+            <TextBlock Text="System Cleanup"
+                       FontSize="28" FontWeight="Bold"
+                       Foreground="{StaticResource TextPrimaryBrush}"/>
+            <TextBlock Text="Remove junk files and free up disk space"
+                       FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+        </StackPanel>
 
-            <!-- Header -->
-            <StackPanel Grid.Row="0" Margin="0,0,0,20">
-                <TextBlock Text="System Cleanup"
-                           FontSize="28" FontWeight="Bold"
-                           Foreground="{StaticResource TextPrimaryBrush}"/>
-                <TextBlock Text="Remove junk files and free up disk space"
-                           FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+        <!-- Categories List -->
+        <Border Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="Select items to clean" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                    <Button x:Name="BtnSelectAll" Content="Select All"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Click="BtnSelectAll_Click" Margin="16,0,0,0" Padding="12,4"/>
+                    <Button x:Name="BtnSelectNone" Content="Select None"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            Click="BtnSelectNone_Click" Margin="8,0,0,0" Padding="12,4"/>
+                </StackPanel>
+
+                <ItemsControl x:Name="CategoriesList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource BgTertiaryBrush}"
+                                    CornerRadius="4" Padding="12" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+                                    <StackPanel Grid.Column="1">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
+                                                   Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Description}" FontSize="12"
+                                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                                   TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+
+                                    <TextBlock Grid.Column="2" x:Name="SizeText"
+                                               Text="{Binding SizeText}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{StaticResource AccentPrimaryBrush}"
+                                               VerticalAlignment="Center"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Progress -->
+        <Border x:Name="ProgressPanel" Background="{StaticResource BgCardBrush}"
+                CornerRadius="8" Padding="16" Margin="0,16,0,0" Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock x:Name="ProgressStatus" Text="Analyzing..."
+                           Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
+                <ProgressBar x:Name="ProgressBar" Height="4"
+                             Foreground="{StaticResource AccentPrimaryBrush}" Maximum="100"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Summary and Actions -->
+        <Grid Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0">
+                <TextBlock x:Name="SummaryText" Text="Select items and click 'Analyze' to calculate space"
+                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"/>
+                <TextBlock x:Name="TotalSizeText" Text=""
+                           Foreground="{StaticResource AccentPrimaryBrush}" FontSize="20" FontWeight="Bold"
+                           Margin="0,4,0,0"/>
             </StackPanel>
 
-            <!-- Categories List -->
-            <Border Grid.Row="1" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
-                <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <TextBlock Text="Select items to clean" FontSize="16" FontWeight="SemiBold"
-                                   Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                        <Button x:Name="BtnSelectAll" Content="Select All"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Click="BtnSelectAll_Click" Margin="16,0,0,0" Padding="12,4"/>
-                        <Button x:Name="BtnSelectNone" Content="Select None"
-                                Style="{StaticResource SecondaryButtonStyle}"
-                                Click="BtnSelectNone_Click" Margin="8,0,0,0" Padding="12,4"/>
-                    </StackPanel>
-
-                    <ItemsControl x:Name="CategoriesList">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="{StaticResource BgTertiaryBrush}"
-                                        CornerRadius="4" Padding="12" Margin="0,0,0,8">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-
-                                        <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                                                  VerticalAlignment="Center" Margin="0,0,12,0"/>
-
-                                        <StackPanel Grid.Column="1">
-                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold"
-                                                       Foreground="{StaticResource TextPrimaryBrush}"/>
-                                            <TextBlock Text="{Binding Description}" FontSize="12"
-                                                       Foreground="{StaticResource TextSecondaryBrush}"
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
-                                        </StackPanel>
-
-                                        <TextBlock Grid.Column="2" x:Name="SizeText"
-                                                   Text="{Binding SizeText}"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{StaticResource AccentPrimaryBrush}"
-                                                   VerticalAlignment="Center"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-
-            <!-- Progress -->
-            <Border x:Name="ProgressPanel" Grid.Row="2" Background="{StaticResource BgCardBrush}"
-                    CornerRadius="8" Padding="16" Margin="0,16,0,0" Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock x:Name="ProgressStatus" Text="Analyzing..."
-                               Foreground="{StaticResource TextPrimaryBrush}" Margin="0,0,0,8"/>
-                    <ProgressBar x:Name="ProgressBar" Height="4"
-                                 Foreground="{StaticResource AccentPrimaryBrush}" Maximum="100"/>
-                </StackPanel>
-            </Border>
-
-            <!-- Summary and Actions -->
-            <Grid Grid.Row="3" Margin="0,16,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-
-                <StackPanel Grid.Column="0">
-                    <TextBlock x:Name="SummaryText" Text="Select items and click 'Analyze' to calculate space"
-                               Foreground="{StaticResource TextSecondaryBrush}" FontSize="14"/>
-                    <TextBlock x:Name="TotalSizeText" Text=""
-                               Foreground="{StaticResource AccentPrimaryBrush}" FontSize="20" FontWeight="Bold"
-                               Margin="0,4,0,0"/>
-                </StackPanel>
-
-                <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button x:Name="BtnAnalyze" Content="Analyze"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Click="BtnAnalyze_Click" Width="120"/>
-                    <Button x:Name="BtnClean" Content="Clean Now"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Click="BtnClean_Click" Width="120" Margin="12,0,0,0"
-                            IsEnabled="False"/>
-                </StackPanel>
-            </Grid>
+            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="BtnAnalyze" Content="Analyze"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Click="BtnAnalyze_Click" Width="120"/>
+                <Button x:Name="BtnClean" Content="Clean Now"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Click="BtnClean_Click" Width="120" Margin="12,0,0,0"
+                        IsEnabled="False"/>
+            </StackPanel>
         </Grid>
-    </ScrollViewer>
+    </StackPanel>
 </Page>

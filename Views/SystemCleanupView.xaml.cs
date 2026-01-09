@@ -184,6 +184,7 @@ namespace SkidrowKiller.Views
                 ProgressPanel.Visibility = Visibility.Collapsed;
             }
         }
+
     }
 
     public class CleanupCategoryViewModel : INotifyPropertyChanged

@@ -6,198 +6,323 @@
       mc:Ignorable="d"
       Title="Threats">
 
-    <Grid Margin="24">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+    <Page.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+    </Page.Resources>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,24">
-            <TextBlock Text="⚠️ Threats Found"
-                       Style="{StaticResource HeaderTextStyle}"
-                       Margin="0,0,0,8"/>
-            <TextBlock Text="Review detected threats and choose what to do with them"
-                       Style="{StaticResource BodyTextStyle}"/>
-        </StackPanel>
+    <Grid>
+        <!-- Main Content Area -->
+        <Grid Margin="24,24,24,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
 
-        <!-- Threats List -->
-        <Border Grid.Row="1" Style="{StaticResource GlassCardStyle}">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <!-- Header -->
+            <StackPanel Grid.Row="0" Margin="0,0,0,24">
+                <TextBlock Text="Threats Found"
+                           Style="{StaticResource HeaderTextStyle}"
+                           Margin="0,0,0,8"/>
+                <TextBlock Text="Review detected threats and choose what to do with them. Pay attention to the category and recommendation."
+                           Style="{StaticResource BodyTextStyle}"/>
+            </StackPanel>
 
-                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock x:Name="ThreatCountLabel"
-                               Text="0 threats found"
-                               Style="{StaticResource SubHeaderTextStyle}"/>
-                    <Button Content="Refresh"
-                            Style="{StaticResource NavButtonStyle}"
-                            Padding="12,4"
-                            Margin="16,0,0,0"
-                            Click="RefreshButton_Click"/>
-                </StackPanel>
+            <!-- Threat Count and Refresh -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                <TextBlock x:Name="ThreatCountLabel"
+                           Text="0 threats found"
+                           Style="{StaticResource SubHeaderTextStyle}"/>
+                <Button Content="Refresh"
+                        Style="{StaticResource NavButtonStyle}"
+                        Padding="12,4"
+                        Margin="16,0,0,0"
+                        Click="RefreshButton_Click"/>
+            </StackPanel>
 
-                <ListBox Grid.Row="1"
-                         x:Name="ThreatsListBox"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         ItemContainerStyle="{StaticResource ThreatListItemStyle}"
-                         SelectionMode="Extended"
-                         VirtualizingPanel.IsVirtualizing="True">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
+            <!-- Threats List with ScrollViewer -->
+            <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,80">
+                <Grid>
+                    <ScrollViewer x:Name="ThreatsScrollViewer"
+                                  VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Style="{StaticResource ModernScrollViewerStyle}">
+                        <ItemsControl x:Name="ThreatsListBox">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
 
-                                <!-- Severity Icon -->
-                                <Border Grid.Column="0"
-                                        Width="40" Height="40"
-                                        CornerRadius="8"
-                                        Margin="0,0,12,0"
-                                        VerticalAlignment="Center">
-                                    <Border.Style>
-                                        <Style TargetType="Border">
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Critical">
-                                                    <Setter Property="Background" Value="#30ef4444"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="High">
-                                                    <Setter Property="Background" Value="#30f59e0b"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Medium">
-                                                    <Setter Property="Background" Value="#30f59e0b"/>
-                                                </DataTrigger>
-                                                <DataTrigger Binding="{Binding Severity}" Value="Low">
+                                        <!-- Severity Score Box -->
+                                        <Border Grid.Column="0"
+                                                Width="70" Height="70"
+                                                CornerRadius="8"
+                                                Margin="0,0,16,0"
+                                                VerticalAlignment="Top">
+                                            <Border.Style>
+                                                <Style TargetType="Border">
                                                     <Setter Property="Background" Value="#3006b6d4"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Border.Style>
-                                    <TextBlock Text="{Binding Score}"
-                                               FontWeight="Bold"
-                                               FontSize="14"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="Critical">
-                                                        <Setter Property="Foreground" Value="#ef4444"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="High">
-                                                        <Setter Property="Foreground" Value="#f59e0b"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="Medium">
-                                                        <Setter Property="Foreground" Value="#f59e0b"/>
-                                                    </DataTrigger>
-                                                    <DataTrigger Binding="{Binding Severity}" Value="Low">
-                                                        <Setter Property="Foreground" Value="#06b6d4"/>
-                                                    </DataTrigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                                                            <Setter Property="Background" Value="#40ef4444"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="High">
+                                                            <Setter Property="Background" Value="#40f59e0b"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="Medium">
+                                                            <Setter Property="Background" Value="#40eab308"/>
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Severity}" Value="Low">
+                                                            <Setter Property="Background" Value="#3006b6d4"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Border.Style>
+                                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                <TextBlock Text="{Binding Score}"
+                                                           FontWeight="Bold"
+                                                           FontSize="24"
+                                                           HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#06b6d4"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                                                                    <Setter Property="Foreground" Value="#ef4444"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="High">
+                                                                    <Setter Property="Foreground" Value="#f59e0b"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Medium">
+                                                                    <Setter Property="Foreground" Value="#eab308"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding SeverityDisplay}"
+                                                           FontSize="10"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Foreground" Value="#06b6d4"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Critical">
+                                                                    <Setter Property="Foreground" Value="#ef4444"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="High">
+                                                                    <Setter Property="Foreground" Value="#f59e0b"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Severity}" Value="Medium">
+                                                                    <Setter Property="Foreground" Value="#eab308"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Main Info -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Top">
+                                            <!-- Row 1: Malware Name + Category Badge -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="{Binding MalwareName}"
+                                                           FontWeight="Bold"
+                                                           FontSize="15"
+                                                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                                                <Border CornerRadius="4" Padding="8,3" Margin="10,0,0,0"
+                                                        VerticalAlignment="Center">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="Background" Value="#3006b6d4"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Ransomware">
+                                                                    <Setter Property="Background" Value="#40ef4444"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="RAT">
+                                                                    <Setter Property="Background" Value="#40ef4444"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Stealer">
+                                                                    <Setter Property="Background" Value="#40ef4444"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Trojan">
+                                                                    <Setter Property="Background" Value="#40f59e0b"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Cryptominer">
+                                                                    <Setter Property="Background" Value="#40f59e0b"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Crack">
+                                                                    <Setter Property="Background" Value="#40a855f7"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Keygen">
+                                                                    <Setter Property="Background" Value="#40a855f7"/>
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding Category}" Value="Activator">
+                                                                    <Setter Property="Background" Value="#40f59e0b"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                    <TextBlock Text="{Binding CategoryDisplay}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}"/>
+                                                </Border>
+                                                <!-- Can Ignore Badge -->
+                                                <Border CornerRadius="4" Padding="8,3" Margin="6,0,0,0"
+                                                        VerticalAlignment="Center" Visibility="{Binding CanIgnore, Converter={StaticResource BoolToVisibilityConverter}}">
+                                                    <Border.Background>
+                                                        <SolidColorBrush Color="#3022c55e"/>
+                                                    </Border.Background>
+                                                    <TextBlock Text="May Ignore" FontSize="10" FontWeight="SemiBold" Foreground="#22c55e"/>
+                                                </Border>
+                                            </StackPanel>
+
+                                            <!-- Row 2: Filename -->
+                                            <TextBlock Text="{Binding Name}"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="12"
+                                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                                       Margin="0,0,0,2"/>
+
+                                            <!-- Row 3: Path -->
+                                            <TextBlock Text="{Binding Path}"
+                                                       Foreground="{StaticResource TextTertiaryBrush}"
+                                                       FontSize="11"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       MaxWidth="550"
+                                                       Margin="0,0,0,8"/>
+
+                                            <!-- Row 4: Detection Reason -->
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                                <TextBlock Text="Detected: " FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource TextTertiaryBrush}"/>
+                                                <TextBlock Text="{Binding DetectionReason}"
+                                                           FontSize="11"
+                                                           Foreground="{StaticResource TextSecondaryBrush}"
+                                                           TextWrapping="Wrap"
+                                                           MaxWidth="500"/>
+                                            </StackPanel>
+
+                                            <!-- Row 5: Recommendation Box -->
+                                            <Border CornerRadius="6" Padding="12,10" Margin="0,4,0,0">
+                                                <Border.Style>
+                                                    <Style TargetType="Border">
+                                                        <Setter Property="Background" Value="#15ffffff"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding CanIgnore}" Value="False">
+                                                                <Setter Property="Background" Value="#20f59e0b"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Border.Style>
+                                                <StackPanel>
+                                                    <TextBlock Text="Recommendation" FontSize="10" FontWeight="Bold"
+                                                               Foreground="{StaticResource TextTertiaryBrush}" Margin="0,0,0,4"/>
+                                                    <TextBlock Text="{Binding Recommendation}"
+                                                               FontSize="12"
+                                                               TextWrapping="Wrap"
+                                                               MaxWidth="550"
+                                                               LineHeight="18">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding CanIgnore}" Value="False">
+                                                                        <Setter Property="Foreground" Value="#f59e0b"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </Border>
+                                        </StackPanel>
+
+                                        <!-- Actions -->
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Top" Margin="16,0,0,0" Width="120">
+                                            <Button Content="Quarantine"
+                                                    ToolTip="Move to quarantine for later review"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource SecondaryButtonStyle}"
+                                                    Padding="12,8"
+                                                    Margin="0,0,0,6"
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="QuarantineButton_Click"/>
+                                            <Button Content="Delete"
+                                                    ToolTip="Delete permanently (backup will be created)"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource DangerButtonStyle}"
+                                                    Padding="12,8"
+                                                    Margin="0,0,0,6"
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="RemoveButton_Click"/>
+                                            <Button Content="Ignore"
+                                                    ToolTip="Add to whitelist and ignore in future scans"
+                                                    Tag="{Binding}"
+                                                    Style="{StaticResource SuccessButtonStyle}"
+                                                    Padding="12,8"
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="WhitelistButton_Click"/>
+                                        </StackPanel>
+                                    </Grid>
                                 </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
 
-                                <!-- Info -->
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Name}"
-                                               FontWeight="SemiBold"
-                                               Foreground="{StaticResource TextPrimaryBrush}"/>
-                                    <TextBlock Text="{Binding Path}"
-                                               Foreground="{StaticResource TextTertiaryBrush}"
-                                               FontSize="11"
-                                               TextTrimming="CharacterEllipsis"
-                                               MaxWidth="500"/>
-                                    <TextBlock Text="{Binding Description}"
-                                               Foreground="{StaticResource TextSecondaryBrush}"
-                                               FontSize="11"
-                                               Margin="0,4,0,0"/>
-                                </StackPanel>
+                    <!-- Empty State -->
+                    <StackPanel x:Name="EmptyState"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Visibility="Collapsed">
+                        <TextBlock Text="✅" FontSize="48" HorizontalAlignment="Center"/>
+                        <TextBlock Text="No threats found"
+                                   Style="{StaticResource SubHeaderTextStyle}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,16,0,0"/>
+                        <TextBlock Text="Your system appears to be clean"
+                                   Style="{StaticResource BodyTextStyle}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
 
-                                <!-- Type Badge -->
-                                <Border Grid.Column="2"
-                                        Background="#20ffffff"
-                                        CornerRadius="4"
-                                        Padding="8,4"
-                                        Margin="12,0"
-                                        VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding Type}"
-                                               FontSize="10"
-                                               Foreground="{StaticResource TextSecondaryBrush}"/>
-                                </Border>
+        <!-- Floating Action Buttons (always visible at bottom) -->
+        <Border VerticalAlignment="Bottom"
+                HorizontalAlignment="Stretch"
+                Background="{StaticResource BgSecondaryBrush}"
+                Padding="24,12"
+                Margin="0,0,0,0">
+            <Border.Effect>
+                <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="-5" Opacity="0.3" Direction="90"/>
+            </Border.Effect>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <Button x:Name="QuarantineAllButton"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Content="🛡️ Quarantine All"
+                        Padding="20,12"
+                        Click="QuarantineAllButton_Click"/>
 
-                                <!-- Actions -->
-                                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Button Content="🔒"
-                                            ToolTip="Quarantine"
-                                            Tag="{Binding}"
-                                            Style="{StaticResource NavButtonStyle}"
-                                            Padding="8,4"
-                                            Click="QuarantineButton_Click"/>
-                                    <Button Content="🗑️"
-                                            ToolTip="Delete"
-                                            Tag="{Binding}"
-                                            Style="{StaticResource NavButtonStyle}"
-                                            Padding="8,4"
-                                            Click="RemoveButton_Click"/>
-                                    <Button Content="✅"
-                                            ToolTip="Whitelist"
-                                            Tag="{Binding}"
-                                            Style="{StaticResource NavButtonStyle}"
-                                            Padding="8,4"
-                                            Click="WhitelistButton_Click"/>
-                                </StackPanel>
-                            </Grid>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
+                <Button x:Name="RemoveAllButton"
+                        Style="{StaticResource DangerButtonStyle}"
+                        Content="🗑️ Delete All"
+                        Padding="20,12"
+                        Margin="16,0,0,0"
+                        Click="RemoveAllButton_Click"/>
 
-                <!-- Empty State -->
-                <StackPanel x:Name="EmptyState"
-                            Grid.Row="1"
-                            VerticalAlignment="Center"
-                            HorizontalAlignment="Center"
-                            Visibility="Collapsed">
-                    <TextBlock Text="✅" FontSize="48" HorizontalAlignment="Center"/>
-                    <TextBlock Text="No threats found"
-                               Style="{StaticResource SubHeaderTextStyle}"
-                               HorizontalAlignment="Center"
-                               Margin="0,16,0,0"/>
-                    <TextBlock Text="Your system appears to be clean"
-                               Style="{StaticResource BodyTextStyle}"
-                               HorizontalAlignment="Center"/>
-                </StackPanel>
-            </Grid>
+                <Button x:Name="WhitelistAllButton"
+                        Style="{StaticResource SuccessButtonStyle}"
+                        Content="✅ Ignore All Safe"
+                        Padding="20,12"
+                        Margin="16,0,0,0"
+                        Click="WhitelistAllButton_Click"/>
+            </StackPanel>
         </Border>
-
-        <!-- Action Buttons -->
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
-            <Button x:Name="QuarantineAllButton"
-                    Style="{StaticResource PrimaryButtonStyle}"
-                    Content="🔒 Quarantine Selected"
-                    Click="QuarantineAllButton_Click"/>
-
-            <Button x:Name="RemoveAllButton"
-                    Style="{StaticResource DangerButtonStyle}"
-                    Content="🗑️ Delete Selected"
-                    Margin="16,0,0,0"
-                    Click="RemoveAllButton_Click"/>
-
-            <Button x:Name="WhitelistAllButton"
-                    Style="{StaticResource SuccessButtonStyle}"
-                    Content="✅ Whitelist Selected"
-                    Margin="16,0,0,0"
-                    Click="WhitelistAllButton_Click"/>
-        </StackPanel>
     </Grid>
 </Page>

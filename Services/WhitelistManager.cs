@@ -1,13 +1,11 @@
 using System.IO;
-using System.Text.Json;
 using SkidrowKiller.Models;
 
 namespace SkidrowKiller.Services
 {
     public class WhitelistManager
     {
-        private readonly string _whitelistPath;
-        private List<WhitelistEntry> _whitelist = new();
+        private readonly SettingsDatabase? _db;
         private readonly object _lock = new();
 
         // System paths that should NEVER be deleted
@@ -41,47 +39,13 @@ namespace SkidrowKiller.Services
         private readonly string _selfPath;
         private readonly string _selfDirectory;
 
-        public WhitelistManager()
+        public WhitelistManager(SettingsDatabase? db = null)
         {
-            _whitelistPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "whitelist.json");
+            _db = db;
 
             // Self-protection: get our own path to avoid flagging ourselves
             _selfPath = Environment.ProcessPath ?? "";
             _selfDirectory = AppDomain.CurrentDomain.BaseDirectory;
-
-            LoadWhitelist();
-        }
-
-        public void LoadWhitelist()
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    if (File.Exists(_whitelistPath))
-                    {
-                        var json = File.ReadAllText(_whitelistPath);
-                        _whitelist = JsonSerializer.Deserialize<List<WhitelistEntry>>(json) ?? new();
-                    }
-                }
-                catch
-                {
-                    _whitelist = new();
-                }
-            }
-        }
-
-        public void SaveWhitelist()
-        {
-            lock (_lock)
-            {
-                try
-                {
-                    var json = JsonSerializer.Serialize(_whitelist, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(_whitelistPath, json);
-                }
-                catch { }
-            }
         }
 
         public bool IsWhitelisted(string path)
@@ -114,19 +78,10 @@ namespace SkidrowKiller.Services
                 if (_knownSafeFiles.Contains(fileName))
                     return true;
 
-                // Check user whitelist
-                foreach (var entry in _whitelist)
+                // Check database whitelist
+                if (_db != null)
                 {
-                    if (entry.IsPattern)
-                    {
-                        if (MatchesPattern(path, entry.Path))
-                            return true;
-                    }
-                    else
-                    {
-                        if (path.Equals(entry.Path, StringComparison.OrdinalIgnoreCase))
-                            return true;
-                    }
+                    return _db.IsWhitelisted(path);
                 }
             }
 
@@ -153,27 +108,23 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                if (_whitelist.Any(w => w.Path.Equals(path, StringComparison.OrdinalIgnoreCase)))
-                    return;
-
-                _whitelist.Add(new WhitelistEntry
-                {
-                    Path = path,
-                    Name = Path.GetFileName(path),
-                    Reason = reason,
-                    IsPattern = isPattern
-                });
-
-                SaveWhitelist();
+                _db?.AddToWhitelist(path, reason, isPattern);
             }
         }
 
-        public void RemoveFromWhitelist(string id)
+        public void RemoveFromWhitelist(string path)
         {
             lock (_lock)
             {
-                _whitelist.RemoveAll(w => w.Id == id);
-                SaveWhitelist();
+                _db?.RemoveFromWhitelist(path);
+            }
+        }
+
+        public void RemoveFromWhitelistById(long id)
+        {
+            lock (_lock)
+            {
+                _db?.RemoveFromWhitelistById(id);
             }
         }
 
@@ -181,36 +132,19 @@ namespace SkidrowKiller.Services
         {
             lock (_lock)
             {
-                return _whitelist.ToList();
-            }
-        }
+                if (_db == null) return new List<WhitelistEntry>();
 
-        private bool MatchesPattern(string path, string pattern)
-        {
-            // Simple wildcard matching
-            if (pattern.EndsWith("*"))
-            {
-                var prefix = pattern.TrimEnd('*');
-                return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-            }
-            if (pattern.StartsWith("*"))
-            {
-                var suffix = pattern.TrimStart('*');
-                return path.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
-            }
-            if (pattern.Contains("*"))
-            {
-                var parts = pattern.Split('*');
-                var index = 0;
-                foreach (var part in parts)
+                var records = _db.GetWhitelist();
+                return records.Select(r => new WhitelistEntry
                 {
-                    var found = path.IndexOf(part, index, StringComparison.OrdinalIgnoreCase);
-                    if (found < 0) return false;
-                    index = found + part.Length;
-                }
-                return true;
+                    Id = r.Id.ToString(),
+                    Path = r.Path,
+                    Name = Path.GetFileName(r.Path),
+                    Reason = r.Reason ?? "",
+                    IsPattern = r.IsPattern,
+                    AddedAt = r.AddedAt
+                }).ToList();
             }
-            return path.Equals(pattern, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

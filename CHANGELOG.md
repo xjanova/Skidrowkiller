@@ -8,12 +8,103 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Multi-language UI support (English, Chinese, Japanese)
-- Quarantine system improvements
-- Scheduled scan feature
+- Multi-language UI support (English, Chinese, Japanese, Thai, Korean)
 - Email notifications
 - REST API for integration
 - Linux/macOS support
+
+---
+
+## [3.6.0] - 2026-01-09
+
+### Added
+- **Tier 3 Feature Views** - Dedicated UI for premium features
+  - USB Protection View - Monitor connected USB drives, auto-scan on connect, block autorun.inf
+  - Ransomware Protection View - Manage protected folders, honeypot monitoring, file entropy detection
+  - Scheduled Scan View - Configure daily/weekly/monthly automated scans with edit/delete capability
+  - Gaming Mode View - Auto-detect games, manual toggle, session tracking, settings management
+
+### Changed
+- Added 4 new navigation buttons in sidebar for Tier 3 features
+- Improved main window navigation structure
+
+---
+
+## [3.5.1] - 2026-01-08
+
+### Fixed
+- Removed all mockup code - services now fully functional
+- XAML resource errors and scroll issues in views
+
+---
+
+## [3.5.0] - 2026-01-08
+
+### Added
+- **Startup Services Control** - Configure which services start automatically
+- **Service Audit** - View status of all protection services
+
+### Changed
+- Improved settings organization
+
+---
+
+## [3.4.0] - 2026-01-08
+
+### Added
+- **Browser Protection** - Scan and remove malicious browser extensions
+  - Support for Chrome, Firefox, Edge, Brave, Opera
+  - Extension threat analysis
+  - One-click removal
+- **System Cleanup** - Disk cleanup utility
+  - Temp files, browser cache, recycle bin, Windows logs
+  - Space calculation and cleanup
+  - Safe cleanup with progress tracking
+- **Gaming Mode Service** - Reduce CPU usage while gaming
+  - Auto-detect games and fullscreen apps
+  - Suppress notifications during gaming
+  - Configurable protection pause
+- **USB Scan Service** - Protect against infected USB drives
+  - Auto-scan on connect
+  - Block autorun.inf files
+  - Malware detection
+- **Ransomware Protection Service** - Protect important files
+  - Folder protection with monitoring
+  - Honeypot file detection
+  - File entropy analysis
+  - Alert system for suspicious activity
+- **Scheduled Scan Service** - Automate security scans
+  - Daily, weekly, monthly schedules
+  - Quick, full, or custom scan types
+  - Persistent schedule storage
+
+---
+
+## [3.3.0] - 2026-01-08
+
+### Added
+- **Scan Report Service** - Export scan results
+  - HTML, TXT, CSV, JSON formats
+  - Detailed threat information
+  - Summary statistics
+
+---
+
+## [3.2.0] - 2026-01-07
+
+### Added
+- **Network Protection** - Monitor and block malicious network activity
+  - Domain blocking
+  - DNS monitoring
+  - Connection tracking
+- **Self-Protection System** - Prevent tampering
+  - Anti-debugging detection
+  - DLL injection detection
+  - File and registry integrity checks
+- **Anti-Evasion Detection** - Detect advanced malware techniques
+  - Process hollowing detection
+  - Hidden process detection
+  - Basic rootkit detection
 
 ---
 
@@ -148,6 +239,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Highlights |
 |---------|--------------|------------|
+| 3.6.0   | 2026-01-09   | Tier 3 Feature Views (USB, Ransomware, Scheduled, Gaming) |
+| 3.5.1   | 2026-01-08   | Bug fixes, remove mockup code |
+| 3.5.0   | 2026-01-08   | Startup Services Control |
+| 3.4.0   | 2026-01-08   | Browser Protection, System Cleanup, Premium Features |
+| 3.3.0   | 2026-01-08   | Scan Report Service |
+| 3.2.0   | 2026-01-07   | Network Protection, Self-Protection, Anti-Evasion |
 | 3.1.0   | 2026-01-08   | Auto-Update Signatures |
 | 3.0.0   | 2026-01-07   | Real-time Monitoring, WPF UI, Portable Build |
 | 2.1.0   | 2026-01-06   | Log Files |
@@ -156,7 +253,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/xjanova/Skidrowkiller/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/xjanova/Skidrowkiller/compare/v3.6.0...HEAD
+[3.6.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.5.1...v3.6.0
+[3.5.1]: https://github.com/xjanova/Skidrowkiller/compare/v3.5.0...v3.5.1
+[3.5.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.4.0...v3.5.0
+[3.4.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.3.0...v3.4.0
+[3.3.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.2.0...v3.3.0
+[3.2.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/xjanova/Skidrowkiller/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/xjanova/Skidrowkiller/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/xjanova/Skidrowkiller/compare/v2.0.0...v2.1.0
