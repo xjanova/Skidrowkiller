@@ -203,18 +203,40 @@ namespace SkidrowKiller.Services
 
                 try
                 {
+                    bool success;
                     if (entry.RegistryKey != null)
                     {
-                        return RestoreRegistry(entry);
+                        success = RestoreRegistry(entry);
                     }
                     else if (entry.IsDirectory)
                     {
-                        return RestoreDirectory(entry);
+                        success = RestoreDirectory(entry);
                     }
                     else
                     {
-                        return RestoreFile(entry);
+                        success = RestoreFile(entry);
                     }
+
+                    // Delete backup entry after successful restore
+                    if (success)
+                    {
+                        // Delete the backup file
+                        if (!string.IsNullOrEmpty(entry.BackupPath) && File.Exists(entry.BackupPath))
+                        {
+                            try
+                            {
+                                File.Delete(entry.BackupPath);
+                            }
+                            catch { }
+                        }
+
+                        // Remove from list and save
+                        _backups.Remove(entry);
+                        SaveManifest();
+                        RaiseLog($"[BACKUP] Removed backup entry after successful restore: {entry.Name}");
+                    }
+
+                    return success;
                 }
                 catch (Exception ex)
                 {

@@ -121,6 +121,22 @@ namespace SkidrowKiller.Views
             // Database & Updates
             ChkAutoUpdateDb.IsChecked = _settings.AutoUpdateDatabase;
             CmbUpdateFrequency.SelectedIndex = _settings.UpdateFrequencyIndex;
+
+            // Gaming Mode
+            ChkGamingMode.IsChecked = _settings.GamingModeEnabled;
+            ChkAutoDetectGames.IsChecked = _settings.AutoDetectGames;
+            ChkSuppressGamingNotifications.IsChecked = _settings.SuppressGamingNotifications;
+
+            // USB Protection
+            ChkAutoScanUsb.IsChecked = _settings.AutoScanUsb;
+            ChkBlockAutorun.IsChecked = _settings.BlockAutorun;
+
+            // Ransomware Protection
+            ChkRansomwareProtection.IsChecked = _settings.RansomwareProtection;
+            ChkHoneypotFiles.IsChecked = _settings.HoneypotFiles;
+
+            // Scheduled Scans
+            ChkScheduledScans.IsChecked = _settings.ScheduledScansEnabled;
         }
 
         private void ApplyUIToSettings()
@@ -159,6 +175,22 @@ namespace SkidrowKiller.Views
             // Database & Updates
             _settings.AutoUpdateDatabase = ChkAutoUpdateDb.IsChecked ?? true;
             _settings.UpdateFrequencyIndex = CmbUpdateFrequency.SelectedIndex;
+
+            // Gaming Mode
+            _settings.GamingModeEnabled = ChkGamingMode.IsChecked ?? true;
+            _settings.AutoDetectGames = ChkAutoDetectGames.IsChecked ?? true;
+            _settings.SuppressGamingNotifications = ChkSuppressGamingNotifications.IsChecked ?? true;
+
+            // USB Protection
+            _settings.AutoScanUsb = ChkAutoScanUsb.IsChecked ?? true;
+            _settings.BlockAutorun = ChkBlockAutorun.IsChecked ?? true;
+
+            // Ransomware Protection
+            _settings.RansomwareProtection = ChkRansomwareProtection.IsChecked ?? true;
+            _settings.HoneypotFiles = ChkHoneypotFiles.IsChecked ?? true;
+
+            // Scheduled Scans
+            _settings.ScheduledScansEnabled = ChkScheduledScans.IsChecked ?? false;
         }
 
         private void UpdatePaths()
@@ -445,6 +477,28 @@ namespace SkidrowKiller.Views
             });
         }
 
+        private void ManageProtectedFolders_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Protected folders:\n\n" +
+                "• Documents\n• Pictures\n• Videos\n• Music\n• Desktop\n• Downloads\n\n" +
+                "These folders are monitored for ransomware activity.",
+                "Protected Folders",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
+        private void ConfigureSchedule_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(
+                "Scheduled Scan Configuration\n\n" +
+                "Default schedule: Daily at 12:00 PM\n\n" +
+                "To modify schedules, go to the Scan page and configure your preferred scan times.",
+                "Scheduled Scans",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+
     }
 
     /// <summary>
@@ -486,6 +540,22 @@ namespace SkidrowKiller.Views
         // Database & Updates
         public bool AutoUpdateDatabase { get; set; } = true;
         public int UpdateFrequencyIndex { get; set; } = 1; // 0 = Every hour, 1 = Every 6 hours, 2 = Every 12 hours, 3 = Daily
+
+        // Gaming Mode
+        public bool GamingModeEnabled { get; set; } = true;
+        public bool AutoDetectGames { get; set; } = true;
+        public bool SuppressGamingNotifications { get; set; } = true;
+
+        // USB Protection
+        public bool AutoScanUsb { get; set; } = true;
+        public bool BlockAutorun { get; set; } = true;
+
+        // Ransomware Protection
+        public bool RansomwareProtection { get; set; } = true;
+        public bool HoneypotFiles { get; set; } = true;
+
+        // Scheduled Scans
+        public bool ScheduledScansEnabled { get; set; } = false;
 
         // Helper methods
         public int GetBackupRetentionDays()

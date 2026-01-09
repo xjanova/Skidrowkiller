@@ -193,6 +193,190 @@
                 </StackPanel>
             </Border>
 
+            <!-- Gaming Mode Section -->
+            <TextBlock Text="GAMING MODE" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource AccentSecondaryBrush}" Margin="0,12,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <!-- Enable Gaming Mode -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Enable Gaming Mode" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Reduce CPU usage and disable notifications when gaming" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkGamingMode" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Auto-detect Games -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Auto-detect games and fullscreen apps" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically activate when games or fullscreen apps are detected" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkAutoDetectGames" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Suppress Notifications -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Suppress notifications in gaming mode" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Don't show popups or alerts while gaming" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkSuppressGamingNotifications" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- USB Protection Section -->
+            <TextBlock Text="USB PROTECTION" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource WarningBrush}" Margin="0,12,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <!-- Auto-scan USB -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Auto-scan USB drives" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically scan USB drives when connected" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkAutoScanUsb" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Block Autorun -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Block autorun.inf" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically block/remove autorun files from USB drives" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkBlockAutorun" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Ransomware Protection Section -->
+            <TextBlock Text="RANSOMWARE PROTECTION" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource DangerBrush}" Margin="0,12,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <!-- Enable Ransomware Protection -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Enable ransomware protection" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Protect important folders from unauthorized encryption" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkRansomwareProtection" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Protected Folders Info -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Protected folders" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Documents, Pictures, Videos, Music, Desktop, Downloads"
+                                       Style="{StaticResource BodyTextStyle}" FontSize="12"
+                                       Foreground="{StaticResource TextTertiaryBrush}"/>
+                        </StackPanel>
+                        <Button Content="Manage" Style="{StaticResource SecondaryButtonStyle}"
+                                Click="ManageProtectedFolders_Click" VerticalAlignment="Center" Padding="12,6"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Honeypot Files -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Create honeypot files" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Place decoy files to detect ransomware activity early" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkHoneypotFiles" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Scheduled Scans Section -->
+            <TextBlock Text="SCHEDULED SCANS" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource CyanPrimaryBrush}" Margin="0,12,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <!-- Enable Scheduled Scans -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Enable scheduled scans" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Automatically run scans at specified times" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkScheduledScans" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Schedule Settings -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Manage scan schedules" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock x:Name="TxtNextScan" Text="Next scan: Not scheduled"
+                                       Style="{StaticResource BodyTextStyle}" FontSize="12"
+                                       Foreground="{StaticResource TextTertiaryBrush}"/>
+                        </StackPanel>
+                        <Button Content="Configure" Style="{StaticResource SecondaryButtonStyle}"
+                                Click="ConfigureSchedule_Click" VerticalAlignment="Center" Padding="12,6"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- Scanning Section -->
             <TextBlock Text="SCANNING" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
                        Foreground="{StaticResource CyanPrimaryBrush}" Margin="0,12,0,12"/>

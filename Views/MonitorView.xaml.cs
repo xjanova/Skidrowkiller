@@ -17,9 +17,11 @@ namespace SkidrowKiller.Views
         private CancellationTokenSource? _statsCts;
         private bool _isDisposed;
 
-        // Stats history for graphs
+        // Stats history for graphs (separate for each monitor type)
         private readonly double[] _processHistory = new double[8];
         private readonly double[] _networkHistory = new double[8];
+        private readonly double[] _fileHistory = new double[8];
+        private readonly double[] _registryHistory = new double[8];
         private int _historyIndex = 0;
 
         public MonitorView(ProtectionService protection)
@@ -196,9 +198,11 @@ namespace SkidrowKiller.Views
                     var filesCount = _protection.FilesWatched;
                     var registryCount = _protection.RegistryKeysChecked;
 
-                    // Update history for graphs
+                    // Update history for all 4 graphs
                     _processHistory[_historyIndex] = processCount;
                     _networkHistory[_historyIndex] = networkCount;
+                    _fileHistory[_historyIndex] = filesCount;
+                    _registryHistory[_historyIndex] = registryCount;
                     _historyIndex = (_historyIndex + 1) % 8;
 
                     // Get memory usage of this app
@@ -237,8 +241,11 @@ namespace SkidrowKiller.Views
                             ActivityText.Text = "Protection disabled";
                         }
 
-                        // Update graphs with real data
-                        UpdateGraph(ProcessGraphLine, _processHistory, 400);
+                        // Update all 4 graphs with real data
+                        UpdateGraph(ProcessGraphLine, _processHistory, Math.Max(400, processCount * 1.5));
+                        UpdateGraph(NetworkGraphLine, _networkHistory, Math.Max(100, networkCount * 1.5));
+                        UpdateGraph(FileGraphLine, _fileHistory, Math.Max(50, filesCount * 1.5));
+                        UpdateGraph(RegistryGraphLine, _registryHistory, Math.Max(20, registryCount * 1.5));
                     });
                 }
                 catch (OperationCanceledException) { break; }
