@@ -94,19 +94,8 @@ namespace SkidrowKiller
                 _activeNavButton = NavScan;
                 MainFrame.Navigate(_scanView);
 
-                // Start protection service if enabled
-                if (AppConfiguration.Settings.Protection.Enabled)
-                {
-                    _protection.Start();
-                    _monitorView?.RefreshUI();
-                    _logger.Information("Real-time protection started");
-                }
-
-                // Initialize and enable self-protection
-                _ = InitializeSelfProtectionAsync();
-
-                // Start new services based on user settings
-                _ = InitializeNewServicesAsync();
+                // Start services based on user settings
+                _ = InitializeAllServicesAsync();
 
                 // Update title with version
                 var version = UpdateService.GetCurrentVersion();
@@ -220,22 +209,7 @@ namespace SkidrowKiller
             Dispatcher.Invoke(() => UpdateLicenseBadge());
         }
 
-        private async Task InitializeSelfProtectionAsync()
-        {
-            try
-            {
-                _logger.Information("Initializing self-protection system...");
-                await _selfProtection.InitializeAsync();
-                _selfProtection.EnableProtection();
-                _logger.Information("Self-protection enabled - Skidrow Killer is protected from malware attacks");
-            }
-            catch (Exception ex)
-            {
-                _logger.Warning(ex, "Self-protection initialization warning");
-            }
-        }
-
-        private async Task InitializeNewServicesAsync()
+        private async Task InitializeAllServicesAsync()
         {
             try
             {
@@ -252,8 +226,32 @@ namespace SkidrowKiller
                 }
                 settings ??= new Views.UserSettings();
 
-                // Start Gaming Mode if enabled
-                if (settings.GamingModeEnabled)
+                // Start Real-time Protection if enabled at startup
+                if (settings.StartupRealtimeProtection)
+                {
+                    _protection.Start();
+                    _monitorView?.RefreshUI();
+                    _logger.Information("Real-time protection started");
+                }
+
+                // Start Self-Protection if enabled at startup
+                if (settings.StartupSelfProtection)
+                {
+                    try
+                    {
+                        _logger.Information("Initializing self-protection system...");
+                        await _selfProtection.InitializeAsync();
+                        _selfProtection.EnableProtection();
+                        _logger.Information("Self-protection enabled");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning(ex, "Self-protection initialization warning");
+                    }
+                }
+
+                // Start Gaming Mode if enabled at startup
+                if (settings.StartupGamingMode)
                 {
                     _gamingMode.AutoDetectEnabled = settings.AutoDetectGames;
                     _gamingMode.SuppressNotifications = settings.SuppressGamingNotifications;
@@ -261,24 +259,24 @@ namespace SkidrowKiller
                     _logger.Information("Gaming Mode service started");
                 }
 
-                // Start USB Scan if enabled
-                if (settings.AutoScanUsb)
+                // Start USB Protection if enabled at startup
+                if (settings.StartupUsbProtection)
                 {
                     _usbScan.AutoScanEnabled = settings.AutoScanUsb;
                     _usbScan.BlockAutorun = settings.BlockAutorun;
                     _usbScan.Start();
-                    _logger.Information("USB Auto-Scan service started");
+                    _logger.Information("USB Protection service started");
                 }
 
-                // Start Ransomware Protection if enabled
-                if (settings.RansomwareProtection)
+                // Start Ransomware Protection if enabled at startup
+                if (settings.StartupRansomwareProtection)
                 {
                     _ransomwareProtection.Start();
                     _logger.Information("Ransomware Protection service started");
                 }
 
-                // Start Scheduled Scans if enabled
-                if (settings.ScheduledScansEnabled)
+                // Start Scheduled Scans if enabled at startup
+                if (settings.StartupScheduledScans)
                 {
                     _scheduledScan.Start();
                     _logger.Information("Scheduled Scan service started");

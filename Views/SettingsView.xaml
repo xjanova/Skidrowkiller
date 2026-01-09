@@ -71,9 +71,114 @@
             <TextBlock Text="Settings" Style="{StaticResource HeaderTextStyle}" FontSize="28" Margin="0,0,0,8"/>
             <TextBlock Text="Configure Skidrow Killer preferences" Style="{StaticResource BodyTextStyle}" Margin="0,0,0,24"/>
 
+            <!-- Startup Services Section -->
+            <TextBlock Text="STARTUP SERVICES" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
+                       Foreground="{StaticResource SuccessBrush}" Margin="0,0,0,12"/>
+            <Border Style="{StaticResource SettingsCardStyle}">
+                <StackPanel>
+                    <TextBlock Text="Select which services start automatically when the application launches"
+                               Style="{StaticResource BodyTextStyle}" FontSize="12"
+                               Foreground="{StaticResource TextTertiaryBrush}" Margin="0,0,0,12"/>
+
+                    <!-- Real-time Protection -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Real-time Protection" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Monitor system for threats in real-time" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupRealtimeProtection" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Gaming Mode -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Gaming Mode Service" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Auto-detect games and reduce CPU usage" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupGamingMode" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- USB Protection -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="USB Protection Service" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Monitor and scan USB drives automatically" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupUsbProtection" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Ransomware Protection -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Ransomware Protection Service" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Protect folders from encryption attacks" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupRansomwareProtection" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Scheduled Scans -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Scheduled Scan Service" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Run scans at scheduled times" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupScheduledScans" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+
+                    <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+
+                    <!-- Self Protection -->
+                    <Grid Style="{StaticResource SettingRowStyle}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="Self-Protection Service" Style="{StaticResource SubHeaderTextStyle}" FontSize="14"/>
+                            <TextBlock Text="Protect Skidrow Killer from malware attacks" Style="{StaticResource BodyTextStyle}" FontSize="12"/>
+                        </StackPanel>
+                        <CheckBox x:Name="ChkStartupSelfProtection" Grid.Column="1" Style="{StaticResource ToggleSwitchStyle}"
+                                  VerticalAlignment="Center" IsChecked="True" Checked="Setting_Changed" Unchecked="Setting_Changed"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
             <!-- General Section -->
             <TextBlock Text="GENERAL" Style="{StaticResource SubHeaderTextStyle}" FontSize="12"
-                       Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,0,0,12"/>
+                       Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,12,0,12"/>
             <Border Style="{StaticResource SettingsCardStyle}">
                 <StackPanel>
                     <!-- Start with Windows -->

@@ -137,6 +137,14 @@ namespace SkidrowKiller.Views
 
             // Scheduled Scans
             ChkScheduledScans.IsChecked = _settings.ScheduledScansEnabled;
+
+            // Startup Services
+            ChkStartupRealtimeProtection.IsChecked = _settings.StartupRealtimeProtection;
+            ChkStartupGamingMode.IsChecked = _settings.StartupGamingMode;
+            ChkStartupUsbProtection.IsChecked = _settings.StartupUsbProtection;
+            ChkStartupRansomwareProtection.IsChecked = _settings.StartupRansomwareProtection;
+            ChkStartupScheduledScans.IsChecked = _settings.StartupScheduledScans;
+            ChkStartupSelfProtection.IsChecked = _settings.StartupSelfProtection;
         }
 
         private void ApplyUIToSettings()
@@ -191,6 +199,14 @@ namespace SkidrowKiller.Views
 
             // Scheduled Scans
             _settings.ScheduledScansEnabled = ChkScheduledScans.IsChecked ?? false;
+
+            // Startup Services
+            _settings.StartupRealtimeProtection = ChkStartupRealtimeProtection.IsChecked ?? true;
+            _settings.StartupGamingMode = ChkStartupGamingMode.IsChecked ?? true;
+            _settings.StartupUsbProtection = ChkStartupUsbProtection.IsChecked ?? true;
+            _settings.StartupRansomwareProtection = ChkStartupRansomwareProtection.IsChecked ?? true;
+            _settings.StartupScheduledScans = ChkStartupScheduledScans.IsChecked ?? false;
+            _settings.StartupSelfProtection = ChkStartupSelfProtection.IsChecked ?? true;
         }
 
         private void UpdatePaths()
@@ -556,6 +572,14 @@ namespace SkidrowKiller.Views
 
         // Scheduled Scans
         public bool ScheduledScansEnabled { get; set; } = false;
+
+        // Startup Services
+        public bool StartupRealtimeProtection { get; set; } = true;
+        public bool StartupGamingMode { get; set; } = true;
+        public bool StartupUsbProtection { get; set; } = true;
+        public bool StartupRansomwareProtection { get; set; } = true;
+        public bool StartupScheduledScans { get; set; } = false;
+        public bool StartupSelfProtection { get; set; } = true;
 
         // Helper methods
         public int GetBackupRetentionDays()
