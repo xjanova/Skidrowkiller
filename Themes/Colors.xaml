@@ -28,7 +28,7 @@
     <Color x:Key="CyanLightColor">#80deea</Color>
 
     <!-- Status Colors -->
-    <Color x:Key="SuccessColor">#66bb6a</Color>
+    <Color x:Key="SuccessColor">#4cef50</Color>
     <Color x:Key="WarningColor">#ffb74d</Color>
     <Color x:Key="DangerColor">#ef5350</Color>
     <Color x:Key="InfoColor">#29b6f6</Color>

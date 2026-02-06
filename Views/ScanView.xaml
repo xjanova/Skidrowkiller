@@ -99,7 +99,8 @@
                            Style="{StaticResource SubHeaderTextStyle}"
                            Margin="0,0,0,12"/>
 
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MaxHeight="60">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MaxHeight="60"
+                              Style="{StaticResource ModernScrollViewerStyle}">
                     <ItemsControl x:Name="DrivesList">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -173,7 +174,8 @@
                         <Border Grid.Column="0" Background="{StaticResource BgTertiaryBrush}"
                                 BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                 CornerRadius="6" Padding="8" MinHeight="60" MaxHeight="100">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                          Style="{StaticResource ModernScrollViewerStyle}">
                                 <ItemsControl x:Name="CustomFoldersList">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
@@ -351,12 +353,18 @@
                            Style="{StaticResource SubHeaderTextStyle}"
                            Margin="0,0,0,12"/>
 
-                <TextBox Grid.Row="1"
-                         x:Name="LogTextBox"
-                         Style="{StaticResource LogTextBoxStyle}"
-                         VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Disabled"
-                         TextWrapping="Wrap"/>
+                <ScrollViewer Grid.Row="1"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Style="{StaticResource ModernScrollViewerStyle}"
+                              MaxHeight="250">
+                    <TextBox x:Name="LogTextBox"
+                             Style="{StaticResource LogTextBoxStyle}"
+                             VerticalScrollBarVisibility="Disabled"
+                             HorizontalScrollBarVisibility="Disabled"
+                             TextWrapping="Wrap"
+                             IsReadOnly="True"/>
+                </ScrollViewer>
             </Grid>
         </Border>
 

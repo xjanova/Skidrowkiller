@@ -31,6 +31,7 @@ namespace SkidrowKiller.Services
         public event EventHandler<UsbDeviceEventArgs>? DeviceRemoved;
         public event EventHandler<UsbScanEventArgs>? ScanStarted;
         public event EventHandler<UsbScanEventArgs>? ScanCompleted;
+        public event EventHandler<UsbScanProgressEventArgs>? ScanProgress;
         public event EventHandler<UsbThreatEventArgs>? ThreatFound;
         public event EventHandler<string>? LogAdded;
 
@@ -283,8 +284,32 @@ namespace SkidrowKiller.Services
             {
                 var threats = new List<ThreatInfo>();
 
-                // Quick scan: Check root and common locations first
+                // Count total files first for progress calculation
+                int totalFiles = 0;
+                int processedFiles = 0;
+
+                // Quick count of root files
                 var rootFiles = Directory.GetFiles(driveLetter, "*.*", SearchOption.TopDirectoryOnly);
+                totalFiles += rootFiles.Length;
+
+                // Estimate files for each pattern
+                foreach (var pattern in SuspiciousPatterns)
+                {
+                    try
+                    {
+                        var files = Directory.GetFiles(driveLetter, pattern, SearchOption.AllDirectories);
+                        totalFiles += files.Length;
+                    }
+                    catch { }
+                }
+
+                // Ensure minimum total for progress
+                if (totalFiles == 0) totalFiles = 1;
+
+                // Report initial progress
+                ScanProgress?.Invoke(this, new UsbScanProgressEventArgs(driveLetter, 0, totalFiles, "Starting scan..."));
+
+                // Quick scan: Check root and common locations first
                 foreach (var file in rootFiles)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
@@ -296,6 +321,13 @@ namespace SkidrowKiller.Services
                         ThreatFound?.Invoke(this, new UsbThreatEventArgs(driveLetter, threat));
                     }
                     result.FilesScanned++;
+                    processedFiles++;
+
+                    // Report progress every 10 files
+                    if (processedFiles % 10 == 0 || processedFiles == totalFiles)
+                    {
+                        ScanProgress?.Invoke(this, new UsbScanProgressEventArgs(driveLetter, processedFiles, totalFiles, file));
+                    }
                 }
 
                 // Scan for suspicious file types
@@ -317,10 +349,20 @@ namespace SkidrowKiller.Services
                                 ThreatFound?.Invoke(this, new UsbThreatEventArgs(driveLetter, threat));
                             }
                             result.FilesScanned++;
+                            processedFiles++;
+
+                            // Report progress every 10 files
+                            if (processedFiles % 10 == 0 || processedFiles >= totalFiles)
+                            {
+                                ScanProgress?.Invoke(this, new UsbScanProgressEventArgs(driveLetter, processedFiles, totalFiles, file));
+                            }
                         }
                     }
                     catch { }
                 }
+
+                // Final progress report
+                ScanProgress?.Invoke(this, new UsbScanProgressEventArgs(driveLetter, totalFiles, totalFiles, "Scan complete"));
 
                 result.Threats = threats;
                 result.EndTime = DateTime.Now;
@@ -464,6 +506,23 @@ namespace SkidrowKiller.Services
         {
             DriveLetter = driveLetter;
             Threat = threat;
+        }
+    }
+
+    public class UsbScanProgressEventArgs : EventArgs
+    {
+        public string DriveLetter { get; }
+        public int ProcessedFiles { get; }
+        public int TotalFiles { get; }
+        public string CurrentFile { get; }
+        public int ProgressPercent => TotalFiles > 0 ? (int)((ProcessedFiles * 100.0) / TotalFiles) : 0;
+
+        public UsbScanProgressEventArgs(string driveLetter, int processedFiles, int totalFiles, string currentFile)
+        {
+            DriveLetter = driveLetter;
+            ProcessedFiles = processedFiles;
+            TotalFiles = totalFiles;
+            CurrentFile = currentFile;
         }
     }
 }

@@ -11,8 +11,13 @@
     </Page.Resources>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
         <!-- Main Content Area -->
-        <Grid Margin="24,24,24,0">
+        <Grid Grid.Row="0" Margin="24,24,24,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
@@ -28,27 +33,78 @@
                            Style="{StaticResource BodyTextStyle}"/>
             </StackPanel>
 
-            <!-- Threat Count and Refresh -->
-            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
-                <TextBlock x:Name="ThreatCountLabel"
-                           Text="0 threats found"
-                           Style="{StaticResource SubHeaderTextStyle}"/>
-                <Button Content="Refresh"
-                        Style="{StaticResource NavButtonStyle}"
-                        Padding="12,4"
-                        Margin="16,0,0,0"
-                        Click="RefreshButton_Click"/>
-            </StackPanel>
+            <!-- Threat Count, Sorting, and Pagination Controls -->
+            <Grid Grid.Row="1" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Count and Refresh -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock x:Name="ThreatCountLabel"
+                               Text="0 threats found"
+                               Style="{StaticResource SubHeaderTextStyle}"
+                               VerticalAlignment="Center"/>
+                    <Button Content="Refresh"
+                            Style="{StaticResource NavButtonStyle}"
+                            Padding="12,4"
+                            Margin="16,0,0,0"
+                            VerticalAlignment="Center"
+                            Click="RefreshButton_Click"/>
+                </StackPanel>
+
+                <!-- Right: Sort and Page Size -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <!-- Sort By -->
+                    <TextBlock Text="Sort:" Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="SortByComboBox" Width="130" VerticalAlignment="Center"
+                              SelectionChanged="SortByComboBox_SelectionChanged">
+                        <ComboBoxItem Content="Severity" IsSelected="True"/>
+                        <ComboBoxItem Content="Name"/>
+                        <ComboBoxItem Content="Date Found"/>
+                        <ComboBoxItem Content="Category"/>
+                        <ComboBoxItem Content="Score"/>
+                    </ComboBox>
+                    <Button x:Name="SortOrderButton" Content="▼" Width="30"
+                            Style="{StaticResource SecondaryButtonStyle}"
+                            VerticalAlignment="Center" Margin="4,0,0,0"
+                            ToolTip="Toggle sort order"
+                            Click="SortOrderButton_Click"/>
+
+                    <!-- Page Size -->
+                    <TextBlock Text="Show:" Foreground="{StaticResource TextSecondaryBrush}"
+                               VerticalAlignment="Center" Margin="20,0,8,0"/>
+                    <ComboBox x:Name="PageSizeComboBox" Width="70" VerticalAlignment="Center"
+                              SelectionChanged="PageSizeComboBox_SelectionChanged">
+                        <ComboBoxItem Content="10"/>
+                        <ComboBoxItem Content="20" IsSelected="True"/>
+                        <ComboBoxItem Content="50"/>
+                        <ComboBoxItem Content="100"/>
+                        <ComboBoxItem Content="All"/>
+                    </ComboBox>
+                </StackPanel>
+            </Grid>
 
             <!-- Threats List with ScrollViewer -->
-            <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,80">
+            <Border Grid.Row="2" Style="{StaticResource GlassCardStyle}" Margin="0,0,0,16">
                 <Grid>
-                    <ScrollViewer x:Name="ThreatsScrollViewer"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled"
-                                  Style="{StaticResource ModernScrollViewerStyle}">
-                        <ItemsControl x:Name="ThreatsListBox">
-                        <ItemsControl.ItemTemplate>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <ScrollViewer x:Name="ThreatsScrollViewer" Grid.Row="0"
+                                    VerticalScrollBarVisibility="Auto"
+                                    HorizontalScrollBarVisibility="Disabled"
+                                    Style="{StaticResource ModernScrollViewerStyle}"
+                                    PanningMode="VerticalOnly">
+                        <ItemsControl x:Name="ThreatsListBox"
+                                      Background="Transparent"
+                                      Focusable="False">
+                            <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,12">
                                     <Grid>
@@ -271,12 +327,62 @@
                                     </Grid>
                                 </Border>
                             </DataTemplate>
-                        </ItemsControl.ItemTemplate>
+                            </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
 
+                    <!-- Pagination Controls -->
+                    <Border x:Name="PaginationPanel" Grid.Row="1" Background="{StaticResource BgTertiaryBrush}"
+                            CornerRadius="0,0,8,8" Padding="16,12" Visibility="Collapsed">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Page Info (Left) -->
+                            <TextBlock x:Name="PageInfoText" Grid.Column="0"
+                                       Text="Showing 1-20 of 100"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center"/>
+
+                            <!-- Page Navigation (Center) -->
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center">
+                                <Button x:Name="FirstPageButton" Content="⏮" Width="36"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        ToolTip="First page"
+                                        Click="FirstPageButton_Click"/>
+                                <Button x:Name="PrevPageButton" Content="◀" Width="36"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Margin="4,0,0,0" ToolTip="Previous page"
+                                        Click="PrevPageButton_Click"/>
+                                <TextBlock x:Name="CurrentPageText" Text="Page 1 of 5"
+                                           Foreground="{StaticResource TextPrimaryBrush}"
+                                           FontWeight="SemiBold" VerticalAlignment="Center"
+                                           Margin="16,0"/>
+                                <Button x:Name="NextPageButton" Content="▶" Width="36"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        ToolTip="Next page"
+                                        Click="NextPageButton_Click"/>
+                                <Button x:Name="LastPageButton" Content="⏭" Width="36"
+                                        Style="{StaticResource SecondaryButtonStyle}"
+                                        Margin="4,0,0,0" ToolTip="Last page"
+                                        Click="LastPageButton_Click"/>
+                            </StackPanel>
+
+                            <!-- Jump to Page (Right) -->
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock Text="Go to:" Foreground="{StaticResource TextSecondaryBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBox x:Name="GoToPageTextBox" Width="50" VerticalAlignment="Center"
+                                         KeyDown="GoToPageTextBox_KeyDown"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <!-- Empty State -->
-                    <StackPanel x:Name="EmptyState"
+                    <StackPanel x:Name="EmptyState" Grid.Row="0"
                                 VerticalAlignment="Center"
                                 HorizontalAlignment="Center"
                                 Visibility="Collapsed">
@@ -293,34 +399,38 @@
             </Border>
         </Grid>
 
-        <!-- Floating Action Buttons (always visible at bottom) -->
-        <Border VerticalAlignment="Bottom"
-                HorizontalAlignment="Stretch"
+        <!-- Fixed Action Buttons at bottom -->
+        <Border x:Name="FloatingActionPanel"
+                Grid.Row="1"
                 Background="{StaticResource BgSecondaryBrush}"
-                Padding="24,12"
-                Margin="0,0,0,0">
+                Padding="24,16"
+                Margin="24,0,24,24"
+                CornerRadius="12">
             <Border.Effect>
-                <DropShadowEffect Color="Black" BlurRadius="20" ShadowDepth="-5" Opacity="0.3" Direction="90"/>
+                <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.5" Direction="270"/>
             </Border.Effect>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                 <Button x:Name="QuarantineAllButton"
                         Style="{StaticResource PrimaryButtonStyle}"
-                        Content="🛡️ Quarantine All"
-                        Padding="20,12"
+                        Content="Quarantine All"
+                        Padding="24,12"
+                        FontWeight="SemiBold"
                         Click="QuarantineAllButton_Click"/>
 
                 <Button x:Name="RemoveAllButton"
                         Style="{StaticResource DangerButtonStyle}"
-                        Content="🗑️ Delete All"
-                        Padding="20,12"
+                        Content="Delete All"
+                        Padding="24,12"
                         Margin="16,0,0,0"
+                        FontWeight="SemiBold"
                         Click="RemoveAllButton_Click"/>
 
                 <Button x:Name="WhitelistAllButton"
                         Style="{StaticResource SuccessButtonStyle}"
-                        Content="✅ Ignore All Safe"
-                        Padding="20,12"
+                        Content="Ignore All Safe"
+                        Padding="24,12"
                         Margin="16,0,0,0"
+                        FontWeight="SemiBold"
                         Click="WhitelistAllButton_Click"/>
             </StackPanel>
         </Border>

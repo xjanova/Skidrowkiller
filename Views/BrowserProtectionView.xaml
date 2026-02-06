@@ -77,7 +77,8 @@
 
                 <!-- Results List -->
                 <ScrollViewer x:Name="ResultsScroll" Grid.Row="1"
-                              VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
+                              VerticalScrollBarVisibility="Auto" Visibility="Collapsed"
+                              Style="{StaticResource ModernScrollViewerStyle}">
                     <StackPanel x:Name="ResultsPanel"/>
                 </ScrollViewer>
 

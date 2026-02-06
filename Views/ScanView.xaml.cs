@@ -617,7 +617,13 @@ namespace SkidrowKiller.Views
                         continue;
                     }
 
-                    // Show confirmation dialog
+                    // Show confirmation dialog (check if app is still running)
+                    if (Application.Current == null || Application.Current.MainWindow == null)
+                    {
+                        // Application is shutting down, stop processing
+                        return;
+                    }
+
                     var dialog = new ThreatConfirmDialog(threat, i, confirmNeeded.Count)
                     {
                         Owner = Window.GetWindow(this)

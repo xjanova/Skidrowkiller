@@ -23,6 +23,7 @@ namespace SkidrowKiller.Views
             // Subscribe to events
             _ransomwareService.AlertRaised += OnAlertRaised;
             _ransomwareService.LogAdded += OnLogAdded;
+            _ransomwareService.StatusChanged += OnStatusChanged;
 
             // Initialize UI
             UpdateStatus();
@@ -291,6 +292,11 @@ namespace SkidrowKiller.Views
         private void OnLogAdded(object? sender, string e)
         {
             AddLogEntry(e);
+        }
+
+        private void OnStatusChanged(object? sender, bool isEnabled)
+        {
+            UpdateStatus();
         }
 
         #endregion

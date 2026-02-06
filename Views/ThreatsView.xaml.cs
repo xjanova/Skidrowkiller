@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using SkidrowKiller.Models;
 using SkidrowKiller.Services;
 
@@ -13,6 +14,14 @@ namespace SkidrowKiller.Views
         private readonly QuarantineService _quarantine;
         private List<ThreatInfo> _threats = new();
 
+        // Sorting and Pagination state
+        private string _sortField = "Severity";
+        private bool _sortAscending = false;
+        private int _pageSize = 20;
+        private int _currentPage = 1;
+        private int _totalPages = 1;
+        private bool _isInitialized = false;
+
         public ThreatsView(SafeScanner scanner, WhitelistManager whitelist, BackupManager backup, QuarantineService quarantine)
         {
             InitializeComponent();
@@ -22,6 +31,17 @@ namespace SkidrowKiller.Views
             _quarantine = quarantine;
 
             _scanner.ThreatFound += Scanner_ThreatFound;
+            _isInitialized = true;
+
+            // Handle mouse wheel scrolling for the entire content area
+            ThreatsListBox.PreviewMouseWheel += OnPreviewMouseWheel;
+        }
+
+        private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            // Bubble scroll event to parent ScrollViewer
+            ThreatsScrollViewer.ScrollToVerticalOffset(ThreatsScrollViewer.VerticalOffset - e.Delta / 3.0);
+            e.Handled = true;
         }
 
         private void Scanner_ThreatFound(object? sender, ThreatInfo threat)
@@ -32,18 +52,107 @@ namespace SkidrowKiller.Views
                 RefreshThreats();
 
                 // Auto-scroll to bottom to show newest threat
-                ThreatsScrollViewer.ScrollToEnd();
+                ScrollToEnd();
             });
+        }
+
+        private void ScrollToEnd()
+        {
+            ThreatsScrollViewer.ScrollToEnd();
+        }
+
+        private void ScrollToTop()
+        {
+            ThreatsScrollViewer.ScrollToTop();
         }
 
         public void RefreshThreats()
         {
-            ThreatsListBox.ItemsSource = null;
-            ThreatsListBox.ItemsSource = _threats;
-            ThreatCountLabel.Text = $"{_threats.Count} threats found";
+            // Apply sorting
+            var sortedThreats = ApplySorting(_threats);
 
-            EmptyState.Visibility = _threats.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            ThreatsListBox.Visibility = _threats.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            // Apply pagination
+            var totalCount = sortedThreats.Count;
+            var pagedThreats = ApplyPagination(sortedThreats);
+
+            ThreatsListBox.ItemsSource = null;
+            ThreatsListBox.ItemsSource = pagedThreats;
+            ThreatCountLabel.Text = $"{totalCount} threats found";
+
+            EmptyState.Visibility = totalCount == 0 ? Visibility.Visible : Visibility.Collapsed;
+            ThreatsScrollViewer.Visibility = totalCount > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            // Update pagination UI
+            UpdatePaginationUI(totalCount);
+        }
+
+        private List<ThreatInfo> ApplySorting(List<ThreatInfo> threats)
+        {
+            IEnumerable<ThreatInfo> sorted = _sortField switch
+            {
+                "Severity" => _sortAscending
+                    ? threats.OrderBy(t => t.Severity).ThenBy(t => t.Score)
+                    : threats.OrderByDescending(t => t.Severity).ThenByDescending(t => t.Score),
+                "Name" => _sortAscending
+                    ? threats.OrderBy(t => t.Name)
+                    : threats.OrderByDescending(t => t.Name),
+                "Date Found" => _sortAscending
+                    ? threats.OrderBy(t => t.DetectedAt)
+                    : threats.OrderByDescending(t => t.DetectedAt),
+                "Category" => _sortAscending
+                    ? threats.OrderBy(t => t.Category).ThenByDescending(t => t.Severity)
+                    : threats.OrderByDescending(t => t.Category).ThenByDescending(t => t.Severity),
+                "Score" => _sortAscending
+                    ? threats.OrderBy(t => t.Score)
+                    : threats.OrderByDescending(t => t.Score),
+                _ => threats.OrderByDescending(t => t.Severity).ThenByDescending(t => t.Score)
+            };
+
+            return sorted.ToList();
+        }
+
+        private List<ThreatInfo> ApplyPagination(List<ThreatInfo> threats)
+        {
+            if (_pageSize <= 0) // "All" selected
+            {
+                _totalPages = 1;
+                _currentPage = 1;
+                return threats;
+            }
+
+            _totalPages = Math.Max(1, (int)Math.Ceiling((double)threats.Count / _pageSize));
+            _currentPage = Math.Clamp(_currentPage, 1, _totalPages);
+
+            return threats
+                .Skip((_currentPage - 1) * _pageSize)
+                .Take(_pageSize)
+                .ToList();
+        }
+
+        private void UpdatePaginationUI(int totalCount)
+        {
+            if (_pageSize <= 0 || totalCount <= _pageSize)
+            {
+                // Hide pagination when showing all or when items fit in one page
+                PaginationPanel.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            PaginationPanel.Visibility = Visibility.Visible;
+
+            // Update page info text
+            var startItem = (_currentPage - 1) * _pageSize + 1;
+            var endItem = Math.Min(_currentPage * _pageSize, totalCount);
+            PageInfoText.Text = $"Showing {startItem}-{endItem} of {totalCount}";
+
+            // Update current page text
+            CurrentPageText.Text = $"Page {_currentPage} of {_totalPages}";
+
+            // Enable/disable navigation buttons
+            FirstPageButton.IsEnabled = _currentPage > 1;
+            PrevPageButton.IsEnabled = _currentPage > 1;
+            NextPageButton.IsEnabled = _currentPage < _totalPages;
+            LastPageButton.IsEnabled = _currentPage < _totalPages;
         }
 
         private void RefreshButton_Click(object sender, RoutedEventArgs e)
@@ -212,5 +321,112 @@ namespace SkidrowKiller.Views
             MessageBox.Show($"Quarantined {quarantined} of {toQuarantine.Count} threats.", "Complete",
                 MessageBoxButton.OK, MessageBoxImage.Information);
         }
+
+        #region Sorting Event Handlers
+
+        private void SortByComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isInitialized) return;
+            if (SortByComboBox.SelectedItem is ComboBoxItem selectedItem)
+            {
+                _sortField = selectedItem.Content?.ToString() ?? "Severity";
+                _currentPage = 1; // Reset to first page when sort changes
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void SortOrderButton_Click(object sender, RoutedEventArgs e)
+        {
+            _sortAscending = !_sortAscending;
+            SortOrderButton.Content = _sortAscending ? "▲" : "▼";
+            SortOrderButton.ToolTip = _sortAscending ? "Ascending (click to change)" : "Descending (click to change)";
+            RefreshThreats();
+            ScrollToTop();
+        }
+
+        #endregion
+
+        #region Pagination Event Handlers
+
+        private void PageSizeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isInitialized) return;
+            if (PageSizeComboBox.SelectedItem is ComboBoxItem selectedItem)
+            {
+                var content = selectedItem.Content?.ToString();
+                if (content == "All")
+                {
+                    _pageSize = 0; // 0 means show all
+                }
+                else if (int.TryParse(content, out var size))
+                {
+                    _pageSize = size;
+                }
+                _currentPage = 1; // Reset to first page when page size changes
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void FirstPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage = 1;
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void PrevPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 1)
+            {
+                _currentPage--;
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void NextPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage < _totalPages)
+            {
+                _currentPage++;
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void LastPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage < _totalPages)
+            {
+                _currentPage = _totalPages;
+                RefreshThreats();
+                ScrollToTop();
+            }
+        }
+
+        private void GoToPageTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (int.TryParse(GoToPageTextBox.Text, out var pageNum))
+                {
+                    pageNum = Math.Clamp(pageNum, 1, _totalPages);
+                    if (pageNum != _currentPage)
+                    {
+                        _currentPage = pageNum;
+                        RefreshThreats();
+                        ScrollToTop();
+                    }
+                }
+                GoToPageTextBox.Clear();
+            }
+        }
+
+        #endregion
     }
 }

@@ -67,6 +67,7 @@ namespace SkidrowKiller.Services
 
         public event EventHandler<RansomwareAlertEventArgs>? AlertRaised;
         public event EventHandler<string>? LogAdded;
+        public event EventHandler<bool>? StatusChanged;
 
         public bool IsEnabled => _isEnabled;
         public IReadOnlySet<string> ProtectedFolders => _protectedFolders;
@@ -109,6 +110,8 @@ namespace SkidrowKiller.Services
 
             RaiseLog("🛡️ Ransomware protection started");
             RaiseLog($"   Protecting {_protectedFolders.Count} folders");
+
+            StatusChanged?.Invoke(this, true);
         }
 
         public void Stop()
@@ -126,6 +129,8 @@ namespace SkidrowKiller.Services
             _watchers.Clear();
 
             RaiseLog("🛡️ Ransomware protection stopped");
+
+            StatusChanged?.Invoke(this, false);
         }
 
         private void AddDefaultProtectedFolders()

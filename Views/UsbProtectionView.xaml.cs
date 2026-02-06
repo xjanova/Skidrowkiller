@@ -25,6 +25,7 @@ namespace SkidrowKiller.Views
             _usbService.DeviceRemoved += OnDeviceRemoved;
             _usbService.ScanStarted += OnScanStarted;
             _usbService.ScanCompleted += OnScanCompleted;
+            _usbService.ScanProgress += OnScanProgress;
             _usbService.ThreatFound += OnThreatFound;
             _usbService.LogAdded += OnLogAdded;
 
@@ -238,11 +239,34 @@ namespace SkidrowKiller.Views
         private void OnScanStarted(object? sender, UsbScanEventArgs e)
         {
             AddLogEntry($"Scanning {e.Device.DriveLetter}...");
+            Dispatcher.Invoke(() =>
+            {
+                ScanProgressPanel.Visibility = Visibility.Visible;
+                TxtScanStatus.Text = $"Scanning {e.Device.DriveLetter}...";
+                TxtScanPercent.Text = "0%";
+                ScanProgressBar.Value = 0;
+                TxtScanFile.Text = "Initializing...";
+            });
+        }
+
+        private void OnScanProgress(object? sender, UsbScanProgressEventArgs e)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ScanProgressBar.Value = e.ProgressPercent;
+                TxtScanPercent.Text = $"{e.ProgressPercent}%";
+                TxtScanFile.Text = e.CurrentFile;
+                TxtScanStatus.Text = $"Scanning {e.DriveLetter}... ({e.ProcessedFiles}/{e.TotalFiles} files)";
+            });
         }
 
         private void OnScanCompleted(object? sender, UsbScanEventArgs e)
         {
             _scannedCount++;
+            Dispatcher.Invoke(() =>
+            {
+                ScanProgressPanel.Visibility = Visibility.Collapsed;
+            });
             if (e.Result.Success)
             {
                 AddLogEntry($"Scan complete: {e.Device.DriveLetter} - {e.Result.FilesScanned} files, {e.Result.Threats.Count} threats");

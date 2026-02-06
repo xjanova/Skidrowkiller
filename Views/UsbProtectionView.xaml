@@ -8,6 +8,7 @@
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
@@ -76,8 +77,25 @@
             </Border>
         </Grid>
 
+        <!-- Scan Progress -->
+        <Border x:Name="ScanProgressPanel" Grid.Row="2" Background="{StaticResource BgCardBrush}"
+                CornerRadius="8" Padding="16" Margin="0,0,0,16" Visibility="Collapsed">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock x:Name="TxtScanStatus" Text="Scanning USB drive..." FontSize="14" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <TextBlock x:Name="TxtScanPercent" Text="0%" FontSize="14" Foreground="{StaticResource AccentPrimaryBrush}"
+                               Margin="8,0,0,0"/>
+                </StackPanel>
+                <ProgressBar x:Name="ScanProgressBar" Height="8" Minimum="0" Maximum="100" Value="0"
+                             Foreground="{StaticResource AccentPrimaryBrush}" Background="{StaticResource BgTertiaryBrush}"/>
+                <TextBlock x:Name="TxtScanFile" Text="" FontSize="11" Foreground="{StaticResource TextTertiaryBrush}"
+                           Margin="0,8,0,0" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+        </Border>
+
         <!-- Connected Devices Section -->
-        <Border Grid.Row="2" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+        <Border Grid.Row="3" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -112,7 +130,7 @@
         </Border>
 
         <!-- Activity Log -->
-        <Border Grid.Row="3" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
+        <Border Grid.Row="4" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -128,7 +146,7 @@
                             FontSize="11"/>
                 </StackPanel>
 
-                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MinHeight="100"
                               Style="{StaticResource ModernScrollViewerStyle}">
                     <StackPanel x:Name="LogPanel">
                         <TextBlock x:Name="EmptyLogText" Text="No activity yet. USB events will appear here."
@@ -140,7 +158,7 @@
         </Border>
 
         <!-- Actions -->
-        <Grid Grid.Row="4" Margin="0,16,0,0">
+        <Grid Grid.Row="5" Margin="0,16,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>

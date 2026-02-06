@@ -879,6 +879,16 @@ namespace SkidrowKiller.Services
 
         private async Task<RegistryThreat?> AnalyzeRegistryEntry(string rootKey, string path, string valueName, string value, string filePath, string description)
         {
+            // Self-exclusion: Skip if this is SkidrowKiller's own registry entries
+            var lowerFilePath = filePath.ToLower();
+            var lowerValue = value.ToLower();
+            if (lowerFilePath.Contains("skidrowkiller") || lowerFilePath.Contains("skidrow killer") ||
+                lowerFilePath.Contains("skidrow-killer") || lowerFilePath.Contains("skidrow_killer") ||
+                lowerValue.Contains("skidrowkiller") || valueName.ToLower().Contains("skidrowkiller"))
+            {
+                return null;
+            }
+
             var threat = new RegistryThreat
             {
                 RegistryPath = $@"{rootKey}\{path}\{valueName}",
@@ -906,8 +916,6 @@ namespace SkidrowKiller.Services
             }
 
             // Check for suspicious patterns in the value
-            var lowerValue = value.ToLower();
-
             if (lowerValue.Contains("-enc ") || lowerValue.Contains("encodedcommand"))
             {
                 threat.SuspiciousIndicators.Add("Encoded PowerShell in registry");

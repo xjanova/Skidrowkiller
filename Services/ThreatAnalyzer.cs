@@ -148,6 +148,8 @@ namespace SkidrowKiller.Services
             "documentation", "docs", "readme",
             "backup", "archive", "old",
             "jetbrains", "vscode", "sublime",
+            // Self-exclusion - don't detect ourselves as malware
+            "skidrowkiller", "skidrow killer", "skidrow-killer", "skidrow_killer",
         };
 
         // Configurable thresholds
@@ -215,6 +217,15 @@ namespace SkidrowKiller.Services
 
             // Check whitelist first
             if (_whitelistManager.IsWhitelisted(path))
+            {
+                return null;
+            }
+
+            var lowerPathCheck = path.ToLower();
+
+            // Self-exclusion: Skip if this is SkidrowKiller's own files/folders
+            if (lowerPathCheck.Contains("skidrowkiller") || lowerPathCheck.Contains("skidrow killer") ||
+                lowerPathCheck.Contains("skidrow-killer") || lowerPathCheck.Contains("skidrow_killer"))
             {
                 return null;
             }
@@ -626,6 +637,12 @@ namespace SkidrowKiller.Services
 
             // Check whitelist
             if (!string.IsNullOrEmpty(executablePath) && _whitelistManager.IsWhitelisted(executablePath))
+            {
+                return null;
+            }
+
+            // Self-exclusion: Skip if this is SkidrowKiller itself
+            if (lowerName.Contains("skidrowkiller") || lowerPath.Contains("skidrowkiller"))
             {
                 return null;
             }
