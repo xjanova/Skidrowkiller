@@ -328,9 +328,9 @@ namespace SkidrowKiller.Views
             // Validate custom mode
             if (scanMode == ScanMode.Custom)
             {
-                if (!ScanFilesCheck.IsChecked == true &&
-                    !ScanRegistryCheck.IsChecked == true &&
-                    !ScanProcessesCheck.IsChecked == true)
+                if (ScanFilesCheck.IsChecked != true &&
+                    ScanRegistryCheck.IsChecked != true &&
+                    ScanProcessesCheck.IsChecked != true)
                 {
                     MessageBox.Show("Please select at least one scan option.", "Warning",
                         MessageBoxButton.OK, MessageBoxImage.Warning);

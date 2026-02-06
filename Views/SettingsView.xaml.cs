@@ -442,7 +442,7 @@ namespace SkidrowKiller.Views
         {
             try
             {
-                var updateService = new UpdateService();
+                using var updateService = new UpdateService();
                 var updateInfo = await updateService.CheckForUpdatesAsync();
 
                 if (updateInfo != null)
@@ -473,8 +473,6 @@ namespace SkidrowKiller.Views
                         MessageBoxButton.OK,
                         MessageBoxImage.Information);
                 }
-
-                updateService.Dispose();
             }
             catch (Exception ex)
             {

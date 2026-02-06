@@ -95,7 +95,8 @@ namespace SkidrowKiller.Services
         private bool ShouldRunNow(ScanSchedule schedule, DateTime now)
         {
             // Check if already ran today/this hour
-            if (schedule.LastRun.Date == now.Date &&
+            if (schedule.LastRun != DateTime.MinValue &&
+                schedule.LastRun.Date == now.Date &&
                 schedule.LastRun.Hour == now.Hour &&
                 schedule.LastRun.Minute == now.Minute)
             {

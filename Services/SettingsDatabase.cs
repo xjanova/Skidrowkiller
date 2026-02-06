@@ -1555,7 +1555,11 @@ public class SettingsDatabase : IDisposable
             cmd.CommandText = "SELECT MAX(StartTime) FROM ScanHistory";
             var lastScan = cmd.ExecuteScalar();
             if (lastScan != DBNull.Value && lastScan != null)
-                stats.LastScanDate = DateTime.Parse(lastScan.ToString()!);
+            {
+                var lastScanStr = lastScan.ToString();
+                if (!string.IsNullOrEmpty(lastScanStr))
+                    stats.LastScanDate = DateTime.Parse(lastScanStr);
+            }
 
             // Database size
             stats.DatabaseSize = new FileInfo(_databasePath).Length;

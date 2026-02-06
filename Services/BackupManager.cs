@@ -237,7 +237,9 @@ namespace SkidrowKiller.Services
                 Directory.Delete(entry.OriginalPath, true);
             }
 
-            ZipFile.ExtractToDirectory(entry.BackupPath, Path.GetDirectoryName(entry.OriginalPath)!, true);
+            var targetDir = Path.GetDirectoryName(entry.OriginalPath);
+            if (targetDir == null) return false;
+            ZipFile.ExtractToDirectory(entry.BackupPath, targetDir, true);
             RaiseLog($"[RESTORE] Restored directory: {entry.OriginalPath}");
             return true;
         }

@@ -23,7 +23,7 @@ namespace SkidrowKiller.Services
     /// - Automatic connectivity checking with grace period
     /// - Encrypted local license storage
     /// </summary>
-    public class LicenseService
+    public class LicenseService : IDisposable
     {
         // Production API server
         private const string API_BASE_URL = "https://xmanstudio.com/api/v1/license";
@@ -962,6 +962,21 @@ namespace SkidrowKiller.Services
                 GetTierInfo(LicenseTier.Pro),
                 GetTierInfo(LicenseTier.Enterprise)
             };
+        }
+
+        #endregion
+
+        #region IDisposable
+
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _connectivityTimer?.Stop();
+            _connectivityTimer?.Dispose();
+            _httpClient?.Dispose();
         }
 
         #endregion

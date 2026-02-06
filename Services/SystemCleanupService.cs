@@ -408,7 +408,17 @@ namespace SkidrowKiller.Services
                             foreach (var file in files)
                             {
                                 if (token.IsCancellationRequested) return;
-                                DeleteFileAsync(file, result).Wait();
+                                try
+                                {
+                                    var info = new FileInfo(file);
+                                    var size = info.Length;
+                                    if ((info.Attributes & FileAttributes.ReadOnly) == FileAttributes.ReadOnly)
+                                        info.Attributes &= ~FileAttributes.ReadOnly;
+                                    File.Delete(file);
+                                    result.FilesDeleted++;
+                                    result.SpaceFreed += size;
+                                }
+                                catch { result.FilesFailed++; }
                             }
                         }
                         catch { }
