@@ -20,7 +20,7 @@ namespace SkidrowKiller.Services
     public class ApplicationSettings
     {
         public string Name { get; set; } = "Skidrow Killer";
-        public string Version { get; set; } = "2.1.0";
+        public string Version { get; set; } = "3.6.0";
         public string Environment { get; set; } = "Development";
         public bool IsProduction => Environment.Equals("Production", StringComparison.OrdinalIgnoreCase);
     }

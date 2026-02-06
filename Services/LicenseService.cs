@@ -14,7 +14,7 @@ namespace SkidrowKiller.Services
 {
     /// <summary>
     /// License service for XMAN Studio integration.
-    /// API Base: https://test.xman4289.com/api/v1/license (test server)
+    /// API Base: https://xmanstudio.com/api/v1/license (production)
     ///
     /// This service provides:
     /// - License key activation and validation
@@ -25,8 +25,8 @@ namespace SkidrowKiller.Services
     /// </summary>
     public class LicenseService
     {
-        // Test API server
-        private const string API_BASE_URL = "https://test.xman4289.com/api/v1/license";
+        // Production API server
+        private const string API_BASE_URL = "https://xmanstudio.com/api/v1/license";
         private const string PRODUCT_ID = "skidrow-killer";
         private const string LICENSE_FILE = "license.dat";
         private const string CONNECTIVITY_FILE = "connectivity.dat";
@@ -338,7 +338,7 @@ namespace SkidrowKiller.Services
         public string GetPurchaseUrl()
         {
             var deviceId = GetDeviceId();
-            return $"https://test.xman4289.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
+            return $"https://xmanstudio.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
         }
 
         #endregion

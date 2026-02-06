@@ -9,9 +9,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SkidrowKiller</RootNamespace>
     <AssemblyName>SkidrowKiller</AssemblyName>
-    <Version>3.4.0</Version>
-    <FileVersion>3.4.0.0</FileVersion>
-    <AssemblyVersion>3.4.0.0</AssemblyVersion>
+    <Version>3.6.0</Version>
+    <FileVersion>3.6.0.0</FileVersion>
+    <AssemblyVersion>3.6.0.0</AssemblyVersion>
     <Authors>xman studio</Authors>
     <Company>xman studio</Company>
     <Product>Skidrow Killer</Product>
