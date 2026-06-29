@@ -1,0 +1,170 @@
+<Page x:Class="SkidrowKiller.Views.HomeView"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      Background="{StaticResource BgPrimaryBrush}">
+
+    <StackPanel Margin="24">
+
+        <!-- Hero: animated scan ring + status -->
+        <Border Background="{StaticResource BgCardBrush}" CornerRadius="12" Padding="24" Margin="0,0,0,20">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Animated radar / scan ring -->
+                <Grid Grid.Column="0" Width="180" Height="180" Margin="0,0,28,0">
+                    <Ellipse Width="180" Height="180" Stroke="{StaticResource BorderBrush}" StrokeThickness="2"/>
+                    <Ellipse Width="138" Height="138" Stroke="#15ffffff" StrokeThickness="1"/>
+                    <Ellipse Width="96" Height="96" Stroke="#15ffffff" StrokeThickness="1"/>
+
+                    <!-- Rotating sweep arc -->
+                    <Ellipse Width="180" Height="180" StrokeThickness="5" StrokeDashArray="22 200" StrokeDashCap="Round"
+                             RenderTransformOrigin="0.5,0.5">
+                        <Ellipse.Stroke>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#29b6f6" Offset="0"/>
+                                <GradientStop Color="#66bb6a" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Ellipse.Stroke>
+                        <Ellipse.Effect>
+                            <DropShadowEffect BlurRadius="18" ShadowDepth="0" Color="#29b6f6" Opacity="0.8"/>
+                        </Ellipse.Effect>
+                        <Ellipse.RenderTransform>
+                            <RotateTransform x:Name="SweepRotate" Angle="0"/>
+                        </Ellipse.RenderTransform>
+                        <Ellipse.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever">
+                                        <DoubleAnimation Storyboard.TargetName="SweepRotate"
+                                                         Storyboard.TargetProperty="Angle"
+                                                         From="0" To="360" Duration="0:0:3.5"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Ellipse.Triggers>
+                    </Ellipse>
+
+                    <!-- Center shield (pulsing) -->
+                    <Path Width="56" Height="56" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                          Data="M12,1L3,5V11C3,16.55 6.84,21.74 12,23C17.16,21.74 21,16.55 21,11V5L12,1M12,7L13.5,10.5L17,11L13.5,11.5L12,15L10.5,11.5L7,11L10.5,10.5L12,7Z"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Path.Fill>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#81d4fa" Offset="0"/>
+                                <GradientStop Color="#66bb6a" Offset="1"/>
+                            </LinearGradientBrush>
+                        </Path.Fill>
+                        <Path.RenderTransform>
+                            <ScaleTransform x:Name="ShieldPulse" ScaleX="1" ScaleY="1"/>
+                        </Path.RenderTransform>
+                        <Path.Triggers>
+                            <EventTrigger RoutedEvent="Loaded">
+                                <BeginStoryboard>
+                                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                                        <DoubleAnimation Storyboard.TargetName="ShieldPulse" Storyboard.TargetProperty="ScaleX" From="1" To="1.12" Duration="0:0:1.4"/>
+                                        <DoubleAnimation Storyboard.TargetName="ShieldPulse" Storyboard.TargetProperty="ScaleY" From="1" To="1.12" Duration="0:0:1.4"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </EventTrigger>
+                        </Path.Triggers>
+                    </Path>
+                </Grid>
+
+                <!-- Status text -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="Skidrow Killer" FontSize="26" FontWeight="Bold"
+                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Ellipse x:Name="StatusDot" Width="12" Height="12" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TxtProtectionStatus" Text="Protected" FontSize="18" FontWeight="SemiBold"
+                                   Foreground="{StaticResource SuccessBrush}" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="TxtProtectionDetail" Text="All protection layers active"
+                               FontSize="13" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                    <TextBlock x:Name="TxtLastScan" Text="Last scan: never"
+                               FontSize="12" Foreground="{StaticResource TextTertiaryBrush}" Margin="0,6,0,0"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- Stat cards -->
+        <Grid Margin="0,0,0,20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,8,0">
+                <StackPanel>
+                    <TextBlock Text="Threats Detected" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="TxtThreats" Text="0" FontSize="26" FontWeight="Bold" Foreground="{StaticResource DangerBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="1" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="4,0,4,0">
+                <StackPanel>
+                    <TextBlock Text="Scans Run" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="TxtScans" Text="0" FontSize="26" FontWeight="Bold" Foreground="{StaticResource AccentPrimaryBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="2" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="4,0,4,0">
+                <StackPanel>
+                    <TextBlock Text="In Quarantine" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="TxtQuarantine" Text="0" FontSize="26" FontWeight="Bold" Foreground="{StaticResource WarningBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+            <Border Grid.Column="3" Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="8,0,0,0">
+                <StackPanel>
+                    <TextBlock Text="Threat-Intel IOCs" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    <TextBlock x:Name="TxtIocs" Text="0" FontSize="26" FontWeight="Bold" Foreground="{StaticResource CyanPrimaryBrush}" Margin="0,4,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Actions -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,20">
+            <Button x:Name="BtnQuickScan" Content="Quick Scan" Style="{StaticResource PrimaryButtonStyle}"
+                    Click="BtnQuickScan_Click" Width="150"/>
+            <Button x:Name="BtnSelfTest" Content="Run Self-Test" Style="{StaticResource SecondaryButtonStyle}"
+                    Click="BtnSelfTest_Click" Width="150" Margin="12,0,0,0"/>
+            <Button x:Name="BtnUpdateIntel" Content="Update Intelligence" Style="{StaticResource SecondaryButtonStyle}"
+                    Click="BtnUpdateIntel_Click" Width="170" Margin="12,0,0,0"/>
+        </StackPanel>
+
+        <!-- Self-test panel -->
+        <Border Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <TextBlock Text="Engine Self-Test" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtSelfTestSummary" Text="Run the self-test to verify every detection layer fires."
+                               FontSize="12" Foreground="{StaticResource TextTertiaryBrush}"
+                               VerticalAlignment="Center" Margin="14,0,0,0"/>
+                </StackPanel>
+
+                <ItemsControl x:Name="SelfTestList">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="4" Padding="12,8" Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <Border Grid.Column="1" CornerRadius="3" Padding="8,2" Background="{Binding StatusBrush}">
+                                        <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</Page>

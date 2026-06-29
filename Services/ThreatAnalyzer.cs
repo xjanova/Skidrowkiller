@@ -134,9 +134,12 @@ namespace SkidrowKiller.Services
             { ".mp3.exe", 80 },
         };
 
+        // Meaningful "this looks like a cracked-game drop" context words. Punctuation tokens ('-', '_')
+        // and bare version tokens were removed — they matched almost every Windows path and made the
+        // booster fire constantly, inflating every borderline score (the #1 cause of "มั่ว" detections).
         private readonly string[] _boosterPatterns = {
             "game", "steam", "origin", "ubisoft", "epic", "gog",
-            "fix", "update", "release", "v1.", "v2.", "-", "_"
+            "crack", "repack", "scene", "release"
         };
 
         private readonly string[] _safeContextPatterns = {
@@ -152,18 +155,60 @@ namespace SkidrowKiller.Services
             "skidrowkiller", "skidrow killer", "skidrow-killer", "skidrow_killer",
         };
 
-        // Configurable thresholds
+        // Configurable thresholds (bound from appsettings.json ThreatAnalysis section in the constructor)
         public int MinimumScoreToReport { get; set; } = 20;
         public int CriticalScoreThreshold { get; set; } = 80;
         public int HighScoreThreshold { get; set; } = 60;
         public int MediumScoreThreshold { get; set; } = 40;
         public int LowScoreThreshold { get; set; } = 20;
+        public bool EnableBoosterPatterns { get; set; } = true;
+        public bool EnableSafeContextReduction { get; set; } = true;
+        public double CautionDirectoryMultiplier { get; set; } = 0.7;
         public bool EnableDeepAnalysis { get; set; } = true;
         public bool EnablePEAnalysis { get; set; } = true;
         public bool EnableHeuristicAnalysis { get; set; } = true;
         public bool EnableBehavioralAnalysis { get; set; } = true;
         public bool EnableEntropyAnalysis { get; set; } = true;
         public bool EnableVirusTotalLookup { get; set; } = false; // Disabled by default (needs API key)
+
+        /// <summary>
+        /// Optional local learning layer. When set, final scores are adjusted by what the app has
+        /// learned from the user's whitelist/restore/removal decisions (bounded + fully auditable).
+        /// </summary>
+        public ReputationService? Reputation { get; set; }
+
+        // Known-malware import hashes (imphash) — clusters malware variants regardless of file hash.
+        // Seeded empty (imphash can collide on trivial imports); populate from the threat-intel feed.
+        private readonly HashSet<string> _badImphashes = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Load a set of known-bad PE import hashes (from the threat-intel feed) for variant detection.</summary>
+        public void SetBadImphashes(IEnumerable<string> imphashes)
+        {
+            _badImphashes.Clear();
+            foreach (var h in imphashes)
+                if (!string.IsNullOrWhiteSpace(h)) _badImphashes.Add(h.Trim().ToLowerInvariant());
+        }
+
+        /// <summary>Binds tunable thresholds and toggles from appsettings.json so detection is actually configurable.</summary>
+        private void ApplyConfiguredThresholds()
+        {
+            try
+            {
+                var ts = AppConfiguration.Settings.ThreatAnalysis;
+                MinimumScoreToReport = ts.MinimumScoreToReport;
+                CriticalScoreThreshold = ts.CriticalScoreThreshold;
+                HighScoreThreshold = ts.HighScoreThreshold;
+                MediumScoreThreshold = ts.MediumScoreThreshold;
+                LowScoreThreshold = ts.LowScoreThreshold;
+                EnableBoosterPatterns = ts.EnableBoosterPatterns;
+                EnableSafeContextReduction = ts.EnableSafeContextReduction;
+                CautionDirectoryMultiplier = ts.CautionDirectoryMultiplier;
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogDebug(ex, "Could not bind ThreatAnalysis config; using defaults");
+            }
+        }
 
         public ThreatAnalyzer(WhitelistManager whitelistManager, ILogger<ThreatAnalyzer>? logger = null)
         {
@@ -174,6 +219,7 @@ namespace SkidrowKiller.Services
             _heuristicEngine = new HeuristicEngine(_signatureDb, _peAnalyzer);
             _behavioralAnalyzer = new BehavioralAnalyzer(null);
             _entropyAnalyzer = new EntropyAnalyzer(null);
+            ApplyConfiguredThresholds();
         }
 
         /// <summary>
@@ -194,6 +240,7 @@ namespace SkidrowKiller.Services
             _signatureDb = new MalwareSignatureDatabase();
             _peAnalyzer = new PEAnalyzer(_signatureDb);
             _heuristicEngine = new HeuristicEngine(_signatureDb, _peAnalyzer);
+            ApplyConfiguredThresholds();
         }
 
         /// <summary>
@@ -211,7 +258,9 @@ namespace SkidrowKiller.Services
         /// <summary>
         /// Analyzes a file path for potential threats using multiple detection methods
         /// </summary>
-        public ThreatInfo? AnalyzePath(string path)
+        public ThreatInfo? AnalyzePath(string path) => AnalyzePath(path, applyReputation: true);
+
+        private ThreatInfo? AnalyzePath(string path, bool applyReputation)
         {
             if (string.IsNullOrEmpty(path)) return null;
 
@@ -325,35 +374,57 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // 8. Apply booster (multiple patterns together = more suspicious)
-            var boosterCount = _boosterPatterns.Count(p => lowerPath.Contains(p));
-            if (boosterCount >= 2 && score > 0)
+            // 8. Apply booster (multiple DISTINCT game-context words co-occurring near the file = more suspicious).
+            // Match against the file name + its immediate parent folder only (not the whole path), require at
+            // least two distinct meaningful tokens, and cap the boost so it can never dominate the score.
+            if (EnableBoosterPatterns && score > 0)
             {
-                var boostAmount = boosterCount * 5;
-                score += boostAmount;
-                matchedPatterns.Add($"[BOOST] +{boostAmount} (context)");
-            }
-
-            // 9. Apply safe context reduction
-            if (safeContextScore > 0)
-            {
-                var reduction = Math.Min(safeContextScore, score / 2);
-                score = Math.Max(0, score - reduction);
-                if (reduction > 0)
+                var parentDir = Path.GetFileName(Path.GetDirectoryName(path)?.ToLower() ?? "");
+                var contextText = $"{lowerName} {parentDir}";
+                var boosterCount = _boosterPatterns.Count(p => contextText.Contains(p));
+                if (boosterCount >= 2)
                 {
-                    matchedPatterns.Add($"[SAFE] -{reduction} (trusted context)");
+                    var boostAmount = Math.Min(boosterCount * 5, 15);
+                    score += boostAmount;
+                    matchedPatterns.Add($"[BOOST] +{boostAmount} (game-crack context)");
                 }
             }
 
-            // 10. Apply caution directory penalty
-            if (_whitelistManager.IsInCautionDirectory(path) && score < 50)
+            // 9. Apply safe-context reduction. Trusted context can now FULLY clear a weak detection
+            // (previously floored at score/2, so trusted dev/system files kept getting reported).
+            if (EnableSafeContextReduction && safeContextScore > 0 && score > 0)
+            {
+                if (safeContextScore >= score)
+                {
+                    // Strong trust signal completely outweighs a weak pattern hit → treat as clean.
+                    return null;
+                }
+                score = Math.Max(0, score - safeContextScore);
+                matchedPatterns.Add($"[SAFE] -{safeContextScore} (trusted context)");
+            }
+
+            // 10. Apply caution-directory multiplier (Program Files, steamapps, node_modules, .git, bin, obj...).
+            // Applied at ALL score levels (the old score<50 gate skipped exactly the Medium/High range where
+            // the most damaging trusted-directory false positives live), and the factor is configurable.
+            if (_whitelistManager.IsInCautionDirectory(path))
             {
                 var originalScore = score;
-                score = (int)(score * 0.7);
+                score = (int)(score * CautionDirectoryMultiplier);
                 if (originalScore != score)
                 {
-                    matchedPatterns.Add($"[CAUTION] -30% (protected directory)");
+                    var pct = (int)Math.Round((1 - CautionDirectoryMultiplier) * 100);
+                    matchedPatterns.Add($"[CAUTION] -{pct}% (protected directory)");
                 }
+            }
+
+            // 11. Apply learned reputation (per-pattern false-positive decay on the quick path;
+            // hash-based trust is applied in the deep path where the SHA-256 is available).
+            if (applyReputation && Reputation != null && matchedPatterns.Count > 0)
+            {
+                var adj = Reputation.AdjustScore(null, matchedPatterns, score, CriticalScoreThreshold);
+                if (adj.TrustedSafe) return null;
+                score = adj.AdjustedScore;
+                matchedPatterns.AddRange(adj.Notes);
             }
 
             // No patterns matched = safe
@@ -399,8 +470,8 @@ namespace SkidrowKiller.Services
         /// </summary>
         public async Task<ThreatInfo?> AnalyzePathDeepAsync(string path)
         {
-            // Start with basic analysis
-            var threat = AnalyzePath(path);
+            // Start with basic analysis (reputation applied once below, after the hash is known)
+            var threat = AnalyzePath(path, applyReputation: false);
 
             if (!EnableDeepAnalysis) return threat;
 
@@ -422,10 +493,29 @@ namespace SkidrowKiller.Services
 
             try
             {
+                // 0. NTFS Alternate Data Streams + Mark-of-the-Web (classic hiding spot / download origin)
+                try
+                {
+                    var ads = AdsScanner.ScanFile(path);
+                    if (ads.HasHiddenExecutableStream)
+                    {
+                        threat.Score += 50;
+                        foreach (var s in ads.Streams.Where(s => s.IsExecutableLike).Take(2))
+                            threat.MatchedPatterns.Add($"[ADS] Hidden executable stream: {s.Name}");
+                    }
+                    if (ads.DownloadedFromInternet && isExecutable)
+                    {
+                        threat.Score += 10;
+                        threat.MatchedPatterns.Add("[MOTW] Downloaded from the internet");
+                    }
+                }
+                catch { }
+
                 // 1. Hash-based detection
                 var sha256 = await _signatureDb.ComputeSHA256Async(path);
                 if (!string.IsNullOrEmpty(sha256))
                 {
+                    threat.Hash = sha256; // stable key for reputation/learning
                     var hashMatch = _signatureDb.CheckHash(sha256, HashType.SHA256);
                     if (hashMatch != null)
                     {
@@ -460,6 +550,13 @@ namespace SkidrowKiller.Services
                         if (peResult.SuspiciousImports.Count > 5)
                         {
                             threat.MatchedPatterns.Add($"[PE] {peResult.SuspiciousImports.Count} suspicious imports");
+                        }
+
+                        // Known-bad import hash → strong variant match (same import fingerprint as known malware).
+                        if (!string.IsNullOrEmpty(peResult.Imphash) && _badImphashes.Contains(peResult.Imphash))
+                        {
+                            threat.Score += 60;
+                            threat.MatchedPatterns.Add($"[IMPHASH] Known-malware import hash {peResult.Imphash[..Math.Min(12, peResult.Imphash.Length)]}…");
                         }
                     }
                 }
@@ -500,6 +597,18 @@ namespace SkidrowKiller.Services
                         {
                             threat.MatchedPatterns.Add($"[TECH] {technique}");
                         }
+                    }
+
+                    // A validly-signed, trusted-publisher binary is a strong "legit" signal: de-escalate
+                    // unless a corroborated malicious signal is present (hash/known-malware/VT/YARA).
+                    if (heuristicResult.IsTrustedSigned && threat.Score > 0 &&
+                        !threat.MatchedPatterns.Any(p =>
+                            p.StartsWith("[HASH]") || p.StartsWith("[MALWARE]") ||
+                            p.StartsWith("[VT]") || p.StartsWith("[YARA]")))
+                    {
+                        var reduction = Math.Min(threat.Score, 25);
+                        threat.Score -= reduction;
+                        threat.MatchedPatterns.Add($"[SAFE] -{reduction} (validly signed by trusted publisher)");
                     }
                 }
 
@@ -598,6 +707,10 @@ namespace SkidrowKiller.Services
                                 threat.Score += vtResult.Suspicious * 2;
                                 threat.MatchedPatterns.Add($"[VT] {vtResult.Suspicious} engines flagged as suspicious");
                             }
+
+                            // LEARNING: VirusTotal is the one corroboration source allowed to flip a
+                            // local verdict — feed it into reputation so cloud truth shapes future scans.
+                            Reputation?.RecordVirusTotal(threat.Hash, path, vtResult.Malicious, vtResult.TotalEngines);
                         }
                     }
                     catch (Exception ex)
@@ -609,6 +722,16 @@ namespace SkidrowKiller.Services
             catch
             {
                 // Continue with what we have
+            }
+
+            // Apply learned reputation using the file hash (bounded + auditable). A locally-trusted
+            // hash clears the detection; a known-bad/VT-corroborated hash is boosted, never silenced.
+            if (Reputation != null && threat.MatchedPatterns.Count > 0)
+            {
+                var adj = Reputation.AdjustScore(threat.Hash, threat.MatchedPatterns, threat.Score, CriticalScoreThreshold);
+                if (adj.TrustedSafe) return null;
+                threat.Score = adj.AdjustedScore;
+                threat.MatchedPatterns.AddRange(adj.Notes);
             }
 
             // Recalculate severity
@@ -657,23 +780,16 @@ namespace SkidrowKiller.Services
                 }
             }
 
-            // 2. Check process name against scene group patterns
+            // 2. Check scene-group patterns against the process name OR its path — scored ONCE per
+            // pattern. (Previously name and path were two separate loops, so a process whose folder
+            // and exe share the same crack-group name, e.g. C:\Games\Codex\codex.exe, was counted
+            // twice — instantly High/Critical from a single weak token.)
             foreach (var (pattern, patternScore) in _highConfidencePatterns)
             {
-                if (lowerName.Contains(pattern))
+                if (lowerName.Contains(pattern) || lowerPath.Contains($"\\{pattern}\\"))
                 {
                     score += patternScore;
                     matchedPatterns.Add($"[PROC] {pattern}");
-                }
-            }
-
-            // 3. Check executable path
-            foreach (var (pattern, patternScore) in _highConfidencePatterns)
-            {
-                if (lowerPath.Contains(pattern))
-                {
-                    score += patternScore;
-                    matchedPatterns.Add($"[PATH] {pattern}");
                 }
             }
 
@@ -807,6 +923,32 @@ namespace SkidrowKiller.Services
             }
             catch { }
 
+            // Memory injection / hollowing signal — committed private executable (esp. RWX) memory is
+            // where injected shellcode / a hollowed payload runs. Contributing signal, not a standalone verdict.
+            try
+            {
+                var mem = MemoryScanner.Scan(process.Id);
+                if (mem.RwxRegions > 0 || mem.PrivateExecRegions >= 3)
+                {
+                    threat ??= new ThreatInfo
+                    {
+                        Type = ThreatType.Process,
+                        Path = execPath ?? process.ProcessName,
+                        Name = process.ProcessName,
+                        ProcessId = process.Id,
+                        Score = 0,
+                        MatchedPatterns = new List<string>()
+                    };
+                    var add = mem.RwxRegions > 0 ? 25 : 12;
+                    threat.Score = Math.Min(threat.Score + add, 100);
+                    threat.MatchedPatterns.Add(
+                        $"[MEMORY] {mem.RwxRegions} RWX / {mem.PrivateExecRegions} private-exec region(s) — possible code injection");
+                    threat.Severity = DetermineServerity(threat.Score);
+                    threat.Description = GenerateDescription(threat.MatchedPatterns, threat.Severity);
+                }
+            }
+            catch { }
+
             if (threat != null && threat.Severity == ThreatSeverity.Safe)
             {
                 return null;
@@ -846,14 +988,13 @@ namespace SkidrowKiller.Services
 
         private ThreatSeverity DetermineServerity(int score)
         {
-            return score switch
-            {
-                >= 80 => ThreatSeverity.Critical,
-                >= 60 => ThreatSeverity.High,
-                >= 40 => ThreatSeverity.Medium,
-                >= 20 => ThreatSeverity.Low,
-                _ => ThreatSeverity.Safe
-            };
+            // Uses the configurable thresholds (bound from appsettings.json) so the FP/sensitivity
+            // trade-off is actually tunable — previously these were hardcoded literals and ignored config.
+            if (score >= CriticalScoreThreshold) return ThreatSeverity.Critical;
+            if (score >= HighScoreThreshold) return ThreatSeverity.High;
+            if (score >= MediumScoreThreshold) return ThreatSeverity.Medium;
+            if (score >= LowScoreThreshold) return ThreatSeverity.Low;
+            return ThreatSeverity.Safe;
         }
 
         private string GenerateDescription(List<string> patterns, ThreatSeverity severity)

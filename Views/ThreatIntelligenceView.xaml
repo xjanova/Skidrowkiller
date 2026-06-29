@@ -3,14 +3,15 @@
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       Background="{StaticResource BgPrimaryBrush}">
 
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
     <StackPanel Margin="24">
         <!-- Header -->
         <StackPanel Margin="0,0,0,20">
             <TextBlock Text="Threat Intelligence"
                        FontSize="28" FontWeight="Bold"
                        Foreground="{StaticResource TextPrimaryBrush}"/>
-            <TextBlock Text="Multi-source threat database updates from ClamAV, abuse.ch, YARA rules, and more"
-                       FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0"/>
+            <TextBlock Text="Live multi-source threat database — abuse.ch, DigitalSide OSINT, ClamAV, YARA, and more — verified over HTTPS with integrity checks"
+                       FontSize="14" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Stats Cards -->
@@ -66,6 +67,72 @@
                 </StackPanel>
             </Border>
         </Grid>
+
+        <!-- Detection Engine — multi-layer credibility -->
+        <Border Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,20">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                    <TextBlock Text="Detection Engine" FontSize="16" FontWeight="SemiBold"
+                               Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                    <Border Background="{StaticResource GreenPrimaryBrush}" CornerRadius="10"
+                            Padding="8,2" Margin="10,0,0,0">
+                        <TextBlock Text="8 ACTIVE LAYERS" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                    </Border>
+                </StackPanel>
+                <WrapPanel>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Authenticode Signature" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Heuristics" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Entropy / Packing" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Behavioral" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="YARA Rules" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Hash Reputation" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="AI Learning" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
+                        <StackPanel Orientation="Horizontal">
+                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Cloud (VirusTotal)" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </WrapPanel>
+                <TextBlock Text="Every file passes all layers, then is cross-checked against the live threat database and your local AI reputation memory — verdicts are explainable, not guessed."
+                           FontSize="12" Foreground="{StaticResource TextTertiaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
 
         <!-- Update Progress Panel -->
         <Border x:Name="ProgressPanel" Background="{StaticResource BgCardBrush}"
@@ -133,6 +200,46 @@
             </Grid>
         </Border>
 
+        <!-- Feed Sources Configuration -->
+        <Border Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16" Margin="0,0,0,20">
+            <StackPanel>
+                <TextBlock Text="Feed Sources" FontSize="16" FontWeight="SemiBold"
+                           Foreground="{StaticResource TextPrimaryBrush}"/>
+                <TextBlock Text="Unlock the abuse.ch feeds (MalwareBazaar, ThreatFox, URLhaus) with a free Auth-Key, or point to your own integrity-verified official feed for the highest trust."
+                           FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,10" TextWrapping="Wrap"/>
+
+                <TextBlock Margin="0,0,0,10">
+                    <Hyperlink NavigateUri="https://auth.abuse.ch/" RequestNavigate="Link_RequestNavigate"
+                               Foreground="{StaticResource AccentPrimaryBrush}">
+                        <Run Text="Get a free abuse.ch Auth-Key →"/>
+                    </Hyperlink>
+                </TextBlock>
+
+                <TextBlock Text="abuse.ch Auth-Key" FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,4"/>
+                <TextBox x:Name="TxtAuthKey" Height="34" Padding="8,6"
+                         Background="{StaticResource BgTertiaryBrush}"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         CaretBrush="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BgTertiaryBrush}" BorderThickness="1"
+                         VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="Official Feed URL (optional, HTTPS, with .sha256 sidecar)" FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,12,0,4"/>
+                <TextBox x:Name="TxtOfficialUrl" Height="34" Padding="8,6"
+                         Background="{StaticResource BgTertiaryBrush}"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         CaretBrush="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BgTertiaryBrush}" BorderThickness="1"
+                         VerticalContentAlignment="Center"/>
+
+                <Button x:Name="BtnSaveFeedConfig" Content="Save Sources"
+                        Style="{StaticResource PrimaryButtonStyle}"
+                        Click="BtnSaveFeedConfig_Click" HorizontalAlignment="Right"
+                        Width="140" Margin="0,12,0,0"/>
+            </StackPanel>
+        </Border>
+
         <!-- Feed List -->
         <Border Background="{StaticResource BgCardBrush}" CornerRadius="8" Padding="16">
             <StackPanel>
@@ -166,6 +273,11 @@
                                                 <TextBlock Text="{Binding TierDisplay}" FontSize="10"
                                                            Foreground="White"/>
                                             </Border>
+                                            <Border Background="{Binding TrustColor}" CornerRadius="2"
+                                                    Padding="6,2" Margin="6,0,0,0">
+                                                <TextBlock Text="{Binding TrustDisplay}" FontSize="10"
+                                                           Foreground="White"/>
+                                            </Border>
                                         </StackPanel>
                                         <TextBlock Text="{Binding CategoryDisplay}" FontSize="12"
                                                    Foreground="{StaticResource TextSecondaryBrush}" Margin="0,2,0,0"/>
@@ -196,4 +308,5 @@
                     Click="BtnUpdateAll_Click" Width="120" Margin="12,0,0,0"/>
         </StackPanel>
     </StackPanel>
+    </ScrollViewer>
 </Page>

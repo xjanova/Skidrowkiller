@@ -16,6 +16,7 @@ namespace SkidrowKiller.Services
     {
         private readonly string _quarantinePath;
         private readonly SettingsDatabase? _db;
+        private readonly ReputationService? _reputation;
         private readonly ILogger _logger;
         private readonly object _lock = new();
 
@@ -26,10 +27,11 @@ namespace SkidrowKiller.Services
         public event EventHandler<QuarantineEntry>? ItemQuarantined;
         public event EventHandler<QuarantineEntry>? ItemRestored;
 
-        public QuarantineService(SettingsDatabase? db = null)
+        public QuarantineService(SettingsDatabase? db = null, ReputationService? reputation = null)
         {
             _logger = LoggingService.ForContext<QuarantineService>();
             _db = db;
+            _reputation = reputation;
 
             _quarantinePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -79,9 +81,6 @@ namespace SkidrowKiller.Services
                     var encryptedContent = EncryptData(fileContent);
                     File.WriteAllBytes(quarantineFilePath, encryptedContent);
 
-                    // Delete original file
-                    File.Delete(filePath);
-
                     var entry = new QuarantineEntry
                     {
                         Id = entryId,
@@ -96,11 +95,21 @@ namespace SkidrowKiller.Services
                         FileHash = fileHash
                     };
 
-                    // Save to database
-                    if (_db != null)
+                    // Persist the record BEFORE touching the original. If the DB write fails we must NOT
+                    // delete the user's file — otherwise it is gone with no recoverable record (data loss).
+                    if (_db != null && !_db.AddQuarantineEntry(entry))
                     {
-                        _db.AddQuarantineEntry(entry);
+                        TryDeleteFile(quarantineFilePath); // remove the now-orphaned encrypted blob
+                        _logger.Error("Quarantine aborted: failed to persist record for {Path}; original left intact", filePath);
+                        return new QuarantineResult
+                        {
+                            Success = false,
+                            Message = "Could not save quarantine record — file was left untouched to avoid data loss."
+                        };
                     }
+
+                    // Record persisted (or no DB configured): now it is safe to remove the original.
+                    File.Delete(filePath);
 
                     var message = $"Quarantined: {fileInfo.Name}";
                     RaiseLog(message);
@@ -170,9 +179,6 @@ namespace SkidrowKiller.Services
 
                         var fileHash = ComputeFileHash(tempZipPath);
 
-                        // Delete original directory
-                        Directory.Delete(directoryPath, true);
-
                         var entry = new QuarantineEntry
                         {
                             Id = entryId,
@@ -188,11 +194,20 @@ namespace SkidrowKiller.Services
                             FileHash = fileHash
                         };
 
-                        // Save to database
-                        if (_db != null)
+                        // Persist the record BEFORE deleting the directory (avoid irrecoverable data loss).
+                        if (_db != null && !_db.AddQuarantineEntry(entry))
                         {
-                            _db.AddQuarantineEntry(entry);
+                            TryDeleteFile(quarantineFilePath);
+                            _logger.Error("Quarantine aborted: failed to persist record for {Path}; directory left intact", directoryPath);
+                            return new QuarantineResult
+                            {
+                                Success = false,
+                                Message = "Could not save quarantine record — directory was left untouched to avoid data loss."
+                            };
                         }
+
+                        // Delete original directory only after the record is safely stored.
+                        Directory.Delete(directoryPath, true);
 
                         var message = $"Quarantined directory: {dirInfo.Name}";
                         RaiseLog(message);
@@ -292,6 +307,10 @@ namespace SkidrowKiller.Services
                     // Mark as restored in database
                     _db?.MarkQuarantineRestored(entry.Id);
 
+                    // LEARNING: the user pulled this file back → it was (very likely) a false positive.
+                    // Bind the signal to the file hash so trust follows the bytes, not the path.
+                    _reputation?.RecordQuarantineRestore(entry.FileHash, entry.OriginalPath, originalScore: entry.ThreatScore);
+
                     var message = $"Restored: {entry.FileName} to {entry.OriginalPath}";
                     RaiseLog(message);
                     _logger.Information("Item restored from quarantine: {Path}", entry.OriginalPath);
@@ -343,6 +362,9 @@ namespace SkidrowKiller.Services
 
                     // Mark as deleted in database
                     _db?.MarkQuarantineDeleted(entry.Id);
+
+                    // LEARNING: the user confirmed and permanently removed this → a true positive.
+                    _reputation?.RecordConfirmedRemoval(entry.FileHash, entry.OriginalPath, originalScore: entry.ThreatScore);
 
                     var message = $"Permanently deleted: {entry.FileName}";
                     RaiseLog(message);
@@ -464,6 +486,10 @@ namespace SkidrowKiller.Services
 
         private static byte[] DecryptData(byte[] encryptedData)
         {
+            // A valid blob is IV(16) + ciphertext; anything shorter is truncated/corrupt.
+            if (encryptedData == null || encryptedData.Length <= 16)
+                throw new InvalidDataException("Quarantine blob is corrupt or truncated.");
+
             using var aes = Aes.Create();
             aes.Key = EncryptionKey;
 
@@ -500,6 +526,11 @@ namespace SkidrowKiller.Services
             {
                 return 0;
             }
+        }
+
+        private static void TryDeleteFile(string path)
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { /* best-effort cleanup */ }
         }
 
         private void RaiseLog(string message)

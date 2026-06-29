@@ -30,9 +30,15 @@ namespace SkidrowKiller
         private readonly ILogger _logger;
 
         private readonly ThreatIntelligenceService _threatIntel;
+        private readonly SignatureUpdateService _signatureUpdate;
+        private readonly RealtimeProcessGuard _processGuard;
+        private readonly DefenderIntegrationService _defender;
         private readonly SettingsDatabase _settingsDb;
+        private readonly ReputationService _reputation;
+        private readonly SelfTestService _selfTest;
 
         private Button? _activeNavButton;
+        private HomeView? _homeView;
         private ScanView? _scanView;
         private MonitorView? _monitorView;
         private ThreatsView? _threatsView;
@@ -64,13 +70,21 @@ namespace SkidrowKiller
                 // Initialize database first (required for other services)
                 _settingsDb = new SettingsDatabase();
 
+                // Local learning layer (reputation) — shared by analyzer, whitelist and quarantine
+                _reputation = new ReputationService();
+
+                // Defender coexistence (safe self-exclusion + status; never disables Defender)
+                _defender = new DefenderIntegrationService();
+
                 // Initialize services
-                _whitelistManager = new WhitelistManager(_settingsDb);
+                _whitelistManager = new WhitelistManager(_settingsDb, _reputation);
                 _backupManager = new BackupManager(_settingsDb);
-                _analyzer = new ThreatAnalyzer(_whitelistManager);
+                _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
+                _selfTest = new SelfTestService(_analyzer);
                 _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
-                _quarantine = new QuarantineService(_settingsDb);
+                _processGuard = new RealtimeProcessGuard(_analyzer, _whitelistManager);
+                _quarantine = new QuarantineService(_settingsDb, _reputation);
                 _licenseService = new LicenseService(_settingsDb);
                 _networkProtection = new NetworkProtectionService(_analyzer);
                 _selfProtection = new SelfProtectionService();
@@ -79,16 +93,30 @@ namespace SkidrowKiller
                 _ransomwareProtection = new RansomwareProtectionService(_settingsDb);
                 _scheduledScan = new ScheduledScanService(_scanner, _settingsDb);
                 _browserProtection = new BrowserProtectionService();
-                _threatIntel = new ThreatIntelligenceService();
+                _threatIntel = new ThreatIntelligenceService(_settingsDb);
+
+                // Signature (signatures.json) auto-updater — reloads the live DB after a verified download.
+                _signatureUpdate = new SignatureUpdateService();
+                _signatureUpdate.AttachSignatureDatabase(_analyzer.SignatureDatabase);
+                var updCfg = AppConfiguration.Settings.Updates;
+                if (!string.IsNullOrWhiteSpace(updCfg.UpdateCheckUrl))
+                    _signatureUpdate.Configure(updCfg.UpdateCheckUrl);
+                _signatureUpdate.AutoUpdate = updCfg.AutoDownloadUpdates;
+                if (updCfg.AutoDownloadUpdates)
+                    _signatureUpdate.StartAutoUpdate();
 
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
                 _protection.StatusChanged += Protection_StatusChanged;
+                _processGuard.ThreatDetected += ProcessGuard_ThreatDetected;
                 _licenseService.LicenseStatusChanged += LicenseService_StatusChanged;
                 _selfProtection.TamperAttemptDetected += SelfProtection_TamperAttemptDetected;
                 _threatIntel.UpdateCompleted += ThreatIntel_UpdateCompleted;
 
                 // Initialize views
+                _homeView = new HomeView(_settingsDb, _quarantine, _threatIntel, _protection, _selfTest);
+                _homeView.QuickScanRequested += (s, e) => NavButton_Click(NavScan, new RoutedEventArgs());
+                _homeView.UpdateIntelRequested += (s, e) => NavButton_Click(NavThreatIntel, new RoutedEventArgs());
                 _scanView = new ScanView(_scanner, _whitelistManager, _backupManager);
                 _monitorView = new MonitorView(_protection);
                 _threatsView = new ThreatsView(_scanner, _whitelistManager, _backupManager, _quarantine);
@@ -115,9 +143,9 @@ namespace SkidrowKiller
                 InitializeStatusBar();
                 StartStatusBarTimer();
 
-                // Navigate to scan view by default
-                _activeNavButton = NavScan;
-                MainFrame.Navigate(_scanView);
+                // Navigate to the Home dashboard by default
+                _activeNavButton = NavHome;
+                MainFrame.Navigate(_homeView);
 
                 // Start services based on user settings
                 _ = InitializeAllServicesAsync();
@@ -142,6 +170,16 @@ namespace SkidrowKiller
             {
                 ThreatCountBadge.Visibility = Visibility.Visible;
                 ThreatCountText.Text = _scanner.IsScanning ? "!" : "1";
+            });
+        }
+
+        private void ProcessGuard_ThreatDetected(object? sender, Models.ThreatInfo threat)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ThreatCountBadge.Visibility = Visibility.Visible;
+                ThreatCountText.Text = "!";
+                SetStatusBarMessage($"Real-time: {threat.Name} — {threat.Description}");
             });
         }
 
@@ -170,6 +208,10 @@ namespace SkidrowKiller
             var tag = button.Tag?.ToString();
             switch (tag)
             {
+                case "Home":
+                    MainFrame.Navigate(_homeView);
+                    _homeView?.RefreshStats();
+                    break;
                 case "Scan":
                     MainFrame.Navigate(_scanView);
                     break;
@@ -239,6 +281,9 @@ namespace SkidrowKiller
 
         private void ThreatIntel_UpdateCompleted(object? sender, ThreatIntelCompleteEventArgs e)
         {
+            // Re-import the freshly downloaded hashes into the live scanner so an update takes effect now.
+            _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+
             Dispatcher.Invoke(() =>
             {
                 UpdateStatusBarThreatIntel();
@@ -253,6 +298,48 @@ namespace SkidrowKiller
         {
             try
             {
+                // Let stale local reputation decay toward neutral so old mistakes heal over time.
+                try { _reputation.DecayOldReputations(); } catch { /* non-critical */ }
+
+                // Defender coexistence: stop Defender from quarantining OUR OWN app (self-exclusion only —
+                // we never disable Defender's protection of the machine). Logs what AV is registered.
+                try
+                {
+                    var defStatus = await _defender.GetStatusAsync();
+                    _logger.Information("Defender status: realtime={RT}, tamperProtected={Tamper}, registeredAVs=[{AVs}], appExcluded={Excl}",
+                        defStatus.DefenderRealtimeEnabled, defStatus.TamperProtectionEnabled,
+                        string.Join(", ", defStatus.RegisteredAntiviruses), defStatus.SelfExcluded);
+
+                    if (AppConfiguration.Settings.Defender.AddSelfExclusionOnStartup && !defStatus.SelfExcluded)
+                        await _defender.EnsureSelfExclusionAsync();
+                }
+                catch (Exception ex) { _logger.Warning(ex, "Defender integration check failed"); }
+
+                // Threat-intel library: make the downloaded hashes ACTUALLY used by the scanner, and
+                // (optionally) refresh feeds in the background on startup.
+                try
+                {
+                    var ti = AppConfiguration.Settings.ThreatIntel;
+                    if (ti.AutoUpdateOnStartup)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _threatIntel.UpdateAllAsync(_licenseService.GetCurrentTier());
+                                await _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                            }
+                            catch (Exception ex) { _logger.Warning(ex, "Startup threat-intel update failed"); }
+                        });
+                    }
+                    else
+                    {
+                        // Import whatever is already cached (no network).
+                        _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                    }
+                }
+                catch (Exception ex) { _logger.Warning(ex, "Threat-intel startup wiring failed"); }
+
                 // Load user settings from SQLite database
                 var settings = new Views.UserSettings
                 {
@@ -277,6 +364,7 @@ namespace SkidrowKiller
                 if (settings.StartupRealtimeProtection)
                 {
                     _protection.Start();
+                    _processGuard.Start(); // catch fast droppers via Win32_ProcessStartTrace
                     _monitorView?.RefreshUI();
                     _logger.Information("Real-time protection started");
                 }
@@ -700,6 +788,14 @@ namespace SkidrowKiller
                 _usbScan?.Dispose();
                 _ransomwareProtection?.Dispose();
                 _scheduledScan?.Dispose();
+                _signatureUpdate?.Dispose();
+                _threatIntel?.Dispose();
+
+                if (_processGuard != null)
+                {
+                    _processGuard.ThreatDetected -= ProcessGuard_ThreatDetected;
+                    _processGuard.Dispose();
+                }
 
                 // Dispose settings database
                 _settingsDb?.Dispose();

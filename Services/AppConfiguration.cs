@@ -15,6 +15,15 @@ namespace SkidrowKiller.Services
         public LoggingSettings Logging { get; set; } = new();
         public UpdateSettings Updates { get; set; } = new();
         public ThreatAnalysisSettings ThreatAnalysis { get; set; } = new();
+        public ThreatIntelSettings ThreatIntel { get; set; } = new();
+        public DefenderSettings Defender { get; set; } = new();
+    }
+
+    public class DefenderSettings
+    {
+        /// <summary>Add our own install folder to Windows Defender's exclusion list at startup (admin) so
+        /// Defender stops quarantining our binary. This NEVER disables Defender's protection.</summary>
+        public bool AddSelfExclusionOnStartup { get; set; } = true;
     }
 
     public class ApplicationSettings
@@ -80,6 +89,18 @@ namespace SkidrowKiller.Services
         public bool EnableBoosterPatterns { get; set; } = true;
         public bool EnableSafeContextReduction { get; set; } = true;
         public double CautionDirectoryMultiplier { get; set; } = 0.7;
+    }
+
+    public class ThreatIntelSettings
+    {
+        /// <summary>Download fresh threat-intel feeds shortly after launch (off by default to respect bandwidth).</summary>
+        public bool AutoUpdateOnStartup { get; set; } = false;
+        /// <summary>Free abuse.ch Auth-Key (https://auth.abuse.ch). Enables MalwareBazaar/ThreatFox/URLhaus feeds.</summary>
+        public string AbuseChAuthKey { get; set; } = "";
+        /// <summary>Optional self-hosted, integrity-verified (.sha256 sidecar) hash feed — the highest-trust channel.</summary>
+        public string OfficialFeedUrl { get; set; } = "";
+        /// <summary>How often the background auto-update runs, in hours.</summary>
+        public int UpdateIntervalHours { get; set; } = 6;
     }
 
     /// <summary>

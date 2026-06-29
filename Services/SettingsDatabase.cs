@@ -46,6 +46,15 @@ public class SettingsDatabase : IDisposable
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
 
+            // Concurrency hardening: WAL lets readers and writers proceed without mutual blocking
+            // (scheduled scan + manual scan + real-time monitor all touch this DB). journal_mode=WAL
+            // is persisted at the database-file level; busy_timeout guards the per-connection wait.
+            using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000;";
+                pragma.ExecuteNonQuery();
+            }
+
             // Create settings table (key-value store)
             var createSettingsTable = @"
                 CREATE TABLE IF NOT EXISTS Settings (
@@ -1073,9 +1082,11 @@ public class SettingsDatabase : IDisposable
     #region Quarantine
 
     /// <summary>
-    /// Add quarantine entry (full details)
+    /// Add quarantine entry (full details).
+    /// Returns true only if the row was actually persisted — callers MUST check this before
+    /// deleting the original file, otherwise a DB failure means silent permanent data loss.
     /// </summary>
-    public void AddQuarantineEntry(QuarantineEntry entry)
+    public bool AddQuarantineEntry(QuarantineEntry entry)
     {
         try
         {
@@ -1099,11 +1110,12 @@ public class SettingsDatabase : IDisposable
             cmd.Parameters.AddWithValue("@qPath", entry.QuarantineFilePath);
             cmd.Parameters.AddWithValue("@isDir", entry.IsDirectory ? 1 : 0);
 
-            cmd.ExecuteNonQuery();
+            return cmd.ExecuteNonQuery() > 0;
         }
         catch (Exception ex)
         {
             _logger.Error(ex, "Failed to add quarantine entry");
+            return false;
         }
     }
 

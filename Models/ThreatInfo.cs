@@ -59,8 +59,37 @@ namespace SkidrowKiller.Models
         public bool IsWhitelisted { get; set; }
         public bool IsBackedUp { get; set; }
         public string? BackupPath { get; set; }
+
+        /// <summary>SHA-256 of the detected file (when computed); the stable key for reputation/learning.</summary>
+        public string Hash { get; set; } = string.Empty;
+
         public bool RequiresConfirmation => Score < 80 && !IsHighConfidence;
-        public bool IsHighConfidence => Score >= 80 || MatchedPatterns.Count >= 3;
+
+        /// <summary>
+        /// High confidence ONLY when the score is very high OR at least two *incriminating* signals
+        /// corroborate each other. De-escalating tags ([SAFE], [BOOST], [CAUTION], [DLL-LEGIT?], [REP])
+        /// and weak heuristics no longer inflate this, so a partly-trusted file is never silently auto-removed.
+        /// </summary>
+        public bool IsHighConfidence => Score >= 80 || CountIncriminatingSignals() >= 2;
+
+        // Strong, malicious-by-themselves detection tags. Weak/contextual tags are deliberately excluded.
+        private static readonly string[] IncriminatingTags =
+        {
+            "[MALWARE]", "[HASH]", "[YARA]", "[VT]", "[INJECTED]", "[SIG]", "[PROC-MAL]"
+        };
+
+        private int CountIncriminatingSignals()
+        {
+            var count = 0;
+            foreach (var p in MatchedPatterns)
+            {
+                foreach (var tag in IncriminatingTags)
+                {
+                    if (p.StartsWith(tag, StringComparison.OrdinalIgnoreCase)) { count++; break; }
+                }
+            }
+            return count;
+        }
 
         // Enhanced threat info
         public string MalwareName { get; set; } = string.Empty;  // e.g., "Crack.Skidrow", "Trojan.Redline"

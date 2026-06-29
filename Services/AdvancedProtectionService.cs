@@ -141,14 +141,21 @@ namespace SkidrowKiller.Services
                     {
                         NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
                         IncludeSubdirectories = true,
+                        InternalBufferSize = 64 * 1024,
                         EnableRaisingEvents = true
                     };
                     watcher.Created += OnFileCreated;
+                    watcher.Error += OnWatcherError;
                     _fileWatchers.Add(watcher);
                     RaiseLog($"👁️ [WATCH] Monitoring: {path}");
                 }
                 catch { }
             }
+        }
+
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            RaiseLog($"⚠️ [WATCH] Monitoring degraded — some file events may have been missed ({e.GetException()?.Message}).");
         }
 
         private void OnFileCreated(object sender, FileSystemEventArgs e)

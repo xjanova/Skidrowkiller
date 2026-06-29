@@ -16,6 +16,7 @@ namespace SkidrowKiller.Services
         private readonly BackupManager _backup;
         private readonly ILogger _logger;
         private CancellationTokenSource? _cts;
+        private int _scanGate; // 0 = idle, 1 = a scan is running (re-entrancy guard)
         private bool _isPaused;
         private bool _disposed;
         private readonly ManualResetEventSlim _pauseEvent = new(true);
@@ -69,10 +70,23 @@ namespace SkidrowKiller.Services
         public async Task<ScanResult> ScanAsync(bool scanFiles, bool scanRegistry, bool scanProcesses,
             Views.ScanMode scanMode = Views.ScanMode.Quick, List<string>? selectedDrives = null, List<string>? customFolders = null)
         {
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
-            var startTime = DateTime.Now;
             var result = new ScanResult();
+
+            // Re-entrancy guard: only one scan at a time. A scheduled scan firing during a manual scan
+            // (or a double-click) used to overwrite _cts and stomp shared progress fields, corrupting
+            // both scans and breaking Stop(). Reject the duplicate instead.
+            if (Interlocked.CompareExchange(ref _scanGate, 1, 0) != 0)
+            {
+                _logger.Warning("Scan start ignored: a scan is already running");
+                RaiseLog("⚠️ A scan is already running — ignoring the duplicate start request.");
+                return result;
+            }
+
+            // Replace and dispose any previous token source (defensive; the gate already serializes this).
+            var previousCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
+            previousCts?.Dispose();
+            var token = _cts!.Token;
+            var startTime = DateTime.Now;
 
             // Store scan parameters
             _currentScanMode = scanMode;
@@ -173,8 +187,6 @@ namespace SkidrowKiller.Services
                 RaiseLog($"  Skipped: {result.ThreatsSkipped}");
                 RaiseLog($"  Duration: {result.Duration.TotalSeconds:F1}s");
                 RaiseLog(new string('=', 60));
-
-                ScanCompleted?.Invoke(this, result);
             }
             catch (OperationCanceledException)
             {
@@ -182,7 +194,20 @@ namespace SkidrowKiller.Services
             }
             catch (Exception ex)
             {
+                // Log the FULL stack so real defects surface in the log instead of vanishing.
+                _logger.Error(ex, "Scan failed unexpectedly");
                 RaiseLog($"\n❌ [ERROR] {ex.Message}");
+            }
+            finally
+            {
+                // Always reset state so the UI un-sticks and a new scan can start, even on error/cancel.
+                result.Duration = DateTime.Now - startTime;
+                var finishedCts = Interlocked.Exchange(ref _cts, null);
+                finishedCts?.Dispose();
+                Interlocked.Exchange(ref _scanGate, 0);
+
+                // Always fire the terminal event so the UI resets regardless of how the scan ended.
+                ScanCompleted?.Invoke(this, result);
             }
 
             return result;
@@ -528,6 +553,26 @@ namespace SkidrowKiller.Services
                     await Task.Run(() => ScanRegistryKey(rootKey, path, result, token), token);
                 }
             }
+
+            // Comprehensive autostart / persistence sweep (ASEPs beyond Run/RunOnce:
+            // Startup folders, Winlogon, AppInit_DLLs, IFEO debugger hijacks, Wow6432Node).
+            try
+            {
+                RaiseLog("   🧬 Checking autostart / persistence locations...");
+                var persistence = await Task.Run(() => new PersistenceScanner(_analyzer).Scan(), token);
+                foreach (var t in persistence)
+                {
+                    if (token.IsCancellationRequested) break;
+                    result.Threats.Add(t);
+                    result.ThreatsFound++;
+                    ThreatFound?.Invoke(this, t);
+                    RaiseLog($"🔴 [PERSISTENCE] {t.SeverityDisplay}: {t.Path}");
+                }
+            }
+            catch (Exception ex)
+            {
+                RaiseLog($"   ⚠️ Persistence scan error: {ex.Message}");
+            }
         }
 
         private void ScanRegistryKey(RegistryKey rootKey, string path, ScanResult result, CancellationToken token)
@@ -639,6 +684,28 @@ namespace SkidrowKiller.Services
 
                 await Task.Delay(10, token); // Small delay to prevent UI freeze
             }
+
+            // Live system inspection: LOLBin command lines, scheduled tasks, services, hosts-file tampering.
+            if (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    RaiseLog("   🛰️ Inspecting live system (LOLBins, scheduled tasks, services, hosts file)...");
+                    var sys = await Task.Run(() => new SystemInspectionScanner(_analyzer, _whitelist).Scan(token), token);
+                    foreach (var t in sys)
+                    {
+                        if (token.IsCancellationRequested) break;
+                        result.Threats.Add(t);
+                        result.ThreatsFound++;
+                        ThreatFound?.Invoke(this, t);
+                        RaiseLog($"🔴 [SYSTEM] {t.SeverityDisplay}: {t.Name} — {t.Description}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    RaiseLog($"   ⚠️ System inspection error: {ex.Message}");
+                }
+            }
         }
 
         private List<string>? GetLoadedModules(Process process)
@@ -721,9 +788,10 @@ namespace SkidrowKiller.Services
                     case ThreatType.File:
                         if (File.Exists(threat.Path))
                         {
-                            File.SetAttributes(threat.Path, FileAttributes.Normal);
-                            File.Delete(threat.Path);
-                            RaiseLog($"✅ [REMOVED] File: {threat.Path}");
+                            // Overwrite the bytes before deleting so the payload can't be carved back from disk
+                            // (a backup copy was already made above if requested).
+                            SecureDelete(threat.Path);
+                            RaiseLog($"✅ [REMOVED] File (securely wiped): {threat.Path}");
                             return true;
                         }
                         break;
@@ -819,6 +887,41 @@ namespace SkidrowKiller.Services
             _logger.Information("Scan stop requested");
             _cts?.Cancel();
             _pauseEvent.Set(); // Unblock if paused
+        }
+
+        /// <summary>
+        /// Securely delete a file by overwriting its contents with random bytes before unlinking, so the
+        /// malware cannot be recovered by file-carving. Overwrites up to 100 MB (enough to destroy the PE
+        /// headers/body of any real sample) then deletes. Falls back to a plain delete if the file is locked.
+        /// </summary>
+        private void SecureDelete(string path)
+        {
+            try
+            {
+                File.SetAttributes(path, FileAttributes.Normal);
+                var length = new FileInfo(path).Length;
+                if (length > 0)
+                {
+                    var toWipe = Math.Min(length, 100L * 1024 * 1024);
+                    using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None);
+                    var buffer = new byte[64 * 1024];
+                    long written = 0;
+                    while (written < toWipe)
+                    {
+                        rng.GetBytes(buffer);
+                        var n = (int)Math.Min(buffer.Length, toWipe - written);
+                        fs.Write(buffer, 0, n);
+                        written += n;
+                    }
+                    fs.Flush(true);
+                }
+                File.Delete(path);
+            }
+            catch
+            {
+                try { File.Delete(path); } catch { /* locked/in-use — leave to quarantine/next boot */ }
+            }
         }
 
         private void RaiseLog(string message)
