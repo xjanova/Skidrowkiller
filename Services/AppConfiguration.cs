@@ -16,6 +16,14 @@ namespace SkidrowKiller.Services
         public UpdateSettings Updates { get; set; } = new();
         public ThreatAnalysisSettings ThreatAnalysis { get; set; } = new();
         public ThreatIntelSettings ThreatIntel { get; set; } = new();
+        public DefenderSettings Defender { get; set; } = new();
+    }
+
+    public class DefenderSettings
+    {
+        /// <summary>Add our own install folder to Windows Defender's exclusion list at startup (admin) so
+        /// Defender stops quarantining our binary. This NEVER disables Defender's protection.</summary>
+        public bool AddSelfExclusionOnStartup { get; set; } = true;
     }
 
     public class ApplicationSettings

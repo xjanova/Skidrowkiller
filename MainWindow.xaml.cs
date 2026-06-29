@@ -32,6 +32,7 @@ namespace SkidrowKiller
         private readonly ThreatIntelligenceService _threatIntel;
         private readonly SignatureUpdateService _signatureUpdate;
         private readonly RealtimeProcessGuard _processGuard;
+        private readonly DefenderIntegrationService _defender;
         private readonly SettingsDatabase _settingsDb;
         private readonly ReputationService _reputation;
 
@@ -69,6 +70,9 @@ namespace SkidrowKiller
 
                 // Local learning layer (reputation) — shared by analyzer, whitelist and quarantine
                 _reputation = new ReputationService();
+
+                // Defender coexistence (safe self-exclusion + status; never disables Defender)
+                _defender = new DefenderIntegrationService();
 
                 // Initialize services
                 _whitelistManager = new WhitelistManager(_settingsDb, _reputation);
@@ -286,6 +290,20 @@ namespace SkidrowKiller
             {
                 // Let stale local reputation decay toward neutral so old mistakes heal over time.
                 try { _reputation.DecayOldReputations(); } catch { /* non-critical */ }
+
+                // Defender coexistence: stop Defender from quarantining OUR OWN app (self-exclusion only —
+                // we never disable Defender's protection of the machine). Logs what AV is registered.
+                try
+                {
+                    var defStatus = await _defender.GetStatusAsync();
+                    _logger.Information("Defender status: realtime={RT}, tamperProtected={Tamper}, registeredAVs=[{AVs}], appExcluded={Excl}",
+                        defStatus.DefenderRealtimeEnabled, defStatus.TamperProtectionEnabled,
+                        string.Join(", ", defStatus.RegisteredAntiviruses), defStatus.SelfExcluded);
+
+                    if (AppConfiguration.Settings.Defender.AddSelfExclusionOnStartup && !defStatus.SelfExcluded)
+                        await _defender.EnsureSelfExclusionAsync();
+                }
+                catch (Exception ex) { _logger.Warning(ex, "Defender integration check failed"); }
 
                 // Threat-intel library: make the downloaded hashes ACTUALLY used by the scanner, and
                 // (optionally) refresh feeds in the background on startup.
