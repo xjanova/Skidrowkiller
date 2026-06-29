@@ -189,6 +189,19 @@ namespace SkidrowKiller.Services
                 if (!string.IsNullOrWhiteSpace(h)) _badImphashes.Add(h.Trim().ToLowerInvariant());
         }
 
+        // Known-malware ssdeep fuzzy hashes (name, signature) for VARIANT detection. Seeded empty;
+        // populate from the threat-intel feed. Empty list = zero scan cost (fuzzy hashing is skipped).
+        private readonly List<(string Name, string Sig)> _badFuzzyHashes = new();
+        public int FuzzyMatchThreshold { get; set; } = 75;
+
+        /// <summary>Load known-bad ssdeep signatures (from the threat-intel feed) for variant detection.</summary>
+        public void SetBadFuzzyHashes(IEnumerable<(string Name, string Sig)> signatures)
+        {
+            _badFuzzyHashes.Clear();
+            foreach (var s in signatures)
+                if (!string.IsNullOrWhiteSpace(s.Sig)) _badFuzzyHashes.Add((s.Name ?? "Variant", s.Sig.Trim()));
+        }
+
         /// <summary>Binds tunable thresholds and toggles from appsettings.json so detection is actually configurable.</summary>
         private void ApplyConfiguredThresholds()
         {
@@ -521,6 +534,38 @@ namespace SkidrowKiller.Services
                     {
                         threat.Score += hashMatch.ThreatLevel * 10;
                         threat.MatchedPatterns.Add($"[HASH] {hashMatch.MalwareName} ({hashMatch.MalwareFamily})");
+                    }
+                }
+
+                // 1b. Fuzzy-hash variant detection (only when we have known-bad signatures to compare against,
+                // so there is zero cost otherwise). Catches repacked/recompiled variants exact hashes miss.
+                if (_badFuzzyHashes.Count > 0)
+                {
+                    try
+                    {
+                        var fi = new FileInfo(path);
+                        if (fi.Length > 0 && fi.Length <= 20 * 1024 * 1024) // 20MB cap for perf
+                        {
+                            var bytes = await File.ReadAllBytesAsync(path);
+                            threat.FuzzyHash = FuzzyHash.Compute(bytes);
+
+                            var best = 0;
+                            var bestName = "";
+                            foreach (var (name, badSig) in _badFuzzyHashes)
+                            {
+                                var sim = FuzzyHash.Compare(threat.FuzzyHash, badSig);
+                                if (sim > best) { best = sim; bestName = name; }
+                            }
+                            if (best >= FuzzyMatchThreshold)
+                            {
+                                threat.Score += 55;
+                                threat.MatchedPatterns.Add($"[FUZZY] {best}% similar to known malware {bestName}");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger?.LogDebug(ex, "Fuzzy hashing failed for {Path}", path);
                     }
                 }
 

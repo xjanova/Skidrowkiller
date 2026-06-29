@@ -63,6 +63,9 @@ namespace SkidrowKiller.Models
         /// <summary>SHA-256 of the detected file (when computed); the stable key for reputation/learning.</summary>
         public string Hash { get; set; } = string.Empty;
 
+        /// <summary>ssdeep fuzzy hash of the file (when computed); used to match malware variants.</summary>
+        public string FuzzyHash { get; set; } = string.Empty;
+
         public bool RequiresConfirmation => Score < 80 && !IsHighConfidence;
 
         /// <summary>
