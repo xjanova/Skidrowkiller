@@ -331,6 +331,17 @@ namespace SkidrowKiller.Services
                     { "net localgroup administrators", ("Admin group modification", 30) },
                     { "sc create", ("Service creation", 25) },
                     { "wmic process call create", ("Process creation via WMI", 25) },
+                    // Anti-recovery / shadow-copy destruction — the hallmark of ransomware before it encrypts.
+                    { "vssadmin delete shadows", ("Deletes Volume Shadow Copies (ransomware anti-recovery)", 60) },
+                    { "vssadmin resize shadowstorage", ("Shrinks shadow storage to wipe restore points", 50) },
+                    { "wmic shadowcopy delete", ("Deletes shadow copies via WMI (ransomware)", 60) },
+                    { "wbadmin delete catalog", ("Deletes the Windows Backup catalog (ransomware)", 55) },
+                    { "wbadmin delete systemstatebackup", ("Deletes system state backups (ransomware)", 55) },
+                    { "bcdedit /set", ("Boot configuration tampering (disables recovery)", 40) },
+                    { "recoveryenabled no", ("Disables Windows recovery (ransomware)", 50) },
+                    { "bootstatuspolicy ignoreallfailures", ("Suppresses boot recovery (ransomware)", 45) },
+                    { "cipher /w", ("Wipes free space to prevent file recovery", 45) },
+                    { "fsutil usn deletejournal", ("Deletes the NTFS change journal (anti-forensics)", 45) },
                 };
 
                 // VBScript suspicious patterns
@@ -383,30 +394,48 @@ namespace SkidrowKiller.Services
             catch { }
         }
 
-        private async Task CheckDigitalSignatureAsync(string filePath, HeuristicResult result)
+        private Task CheckDigitalSignatureAsync(string filePath, HeuristicResult result)
         {
             try
             {
-                // Using Windows API to check Authenticode signature
                 var extension = Path.GetExtension(filePath).ToLower();
-                if (extension != ".exe" && extension != ".dll" && extension != ".sys") return;
+                if (extension != ".exe" && extension != ".dll" && extension != ".sys") return Task.CompletedTask;
 
                 var fileInfo = new FileInfo(filePath);
-                if (fileInfo.Length < 1024) return;
+                if (fileInfo.Length < 1024) return Task.CompletedTask;
 
-                // Check for valid signature using sigcheck-like approach
-                // This is a simplified check - production would use WinVerifyTrust
-                var content = await File.ReadAllBytesAsync(filePath);
-                var hasSignature = ContainsSignature(content);
-
-                if (!hasSignature)
+                // REAL Authenticode verification (validates trust chain + file-hash integrity), not a
+                // mere "is a cert table present?" check that forged signatures slip through.
+                var status = AuthenticodeVerifier.Verify(filePath);
+                switch (status)
                 {
-                    result.SuspiciousIndicators.Add("Executable is not digitally signed");
-                    result.Score += 10;
-                    result.IsUnsigned = true;
+                    case AuthenticodeVerifier.SignatureStatus.Valid:
+                        // Strong trust signal — a validly-signed, trusted-publisher binary. Acts as a
+                        // soft de-escalator (the analyzer reads IsTrustedSigned to relieve false positives).
+                        result.IsTrustedSigned = true;
+                        result.IsUnsigned = false;
+                        break;
+
+                    case AuthenticodeVerifier.SignatureStatus.Invalid:
+                        // Signed but the signature is broken/untrusted/expired → classic forged-cert ghost.
+                        result.SuspiciousIndicators.Add("Invalid or untrusted digital signature");
+                        result.Score += 20;
+                        result.IsUnsigned = false;
+                        break;
+
+                    case AuthenticodeVerifier.SignatureStatus.NotSigned:
+                        // Unsigned is COMMON for legit indie/dev binaries, so by itself it is a weak hint
+                        // (only aggravates when combined with packing/suspicious imports/odd location).
+                        result.SuspiciousIndicators.Add("Executable is not digitally signed");
+                        result.Score += 3;
+                        result.IsUnsigned = true;
+                        break;
+
+                    // Unknown → leave neutral (do not penalize what we cannot determine).
                 }
             }
             catch { }
+            return Task.CompletedTask;
         }
 
         private bool ContainsSignature(byte[] content)
@@ -1000,6 +1029,7 @@ namespace SkidrowKiller.Services
         public long FileSize { get; set; }
         public bool IsPE { get; set; }
         public bool IsUnsigned { get; set; }
+        public bool IsTrustedSigned { get; set; }
         public PEAnalysisResult? PEAnalysis { get; set; }
         public int Score { get; set; }
         public ThreatSeverity ThreatLevel { get; set; }

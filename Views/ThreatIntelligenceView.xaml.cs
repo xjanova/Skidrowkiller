@@ -33,6 +33,10 @@ namespace SkidrowKiller.Views
 
             // Load initial data
             RefreshUI();
+
+            // Populate the saved feed-source configuration (once, so we don't clobber typing on refresh).
+            TxtAuthKey.Text = _threatIntel.AbuseChAuthKey;
+            TxtOfficialUrl.Text = _threatIntel.OfficialFeedUrl;
         }
 
         private void DetermineCurrentTier()
@@ -74,8 +78,8 @@ namespace SkidrowKiller.Views
             TxtCurrentTier.Text = _isTrial ? $"{tierName} (TRIAL)" : tierName;
 
             var allFeeds = _threatIntel.GetFeeds();
-            var availableFeeds = _threatIntel.GetFeedsForTier(_currentTier);
-            TxtAvailableFeeds.Text = $"{availableFeeds.Count} of {allFeeds.Count} feeds available";
+            var usableFeeds = _threatIntel.CountUsableFeeds(_currentTier);
+            TxtAvailableFeeds.Text = $"{usableFeeds} of {allFeeds.Count} feeds active";
 
             // Hide upgrade button for enterprise (unless it's trial - they can still purchase)
             // For trial users, show different message
@@ -103,8 +107,9 @@ namespace SkidrowKiller.Views
 
         private void RefreshFeedList()
         {
+            var hasKey = !string.IsNullOrEmpty(_threatIntel.AbuseChAuthKey);
             var feeds = _threatIntel.GetFeeds();
-            var feedViewModels = feeds.Select(f => new FeedViewModel(f, _currentTier)).ToList();
+            var feedViewModels = feeds.Select(f => new FeedViewModel(f, _currentTier, hasKey)).ToList();
             FeedsList.ItemsSource = feedViewModels;
         }
 
@@ -195,6 +200,31 @@ namespace SkidrowKiller.Views
             RefreshUI();
         }
 
+        private void BtnSaveFeedConfig_Click(object sender, RoutedEventArgs e)
+        {
+            _threatIntel.SaveConfiguration(TxtAuthKey.Text?.Trim(), TxtOfficialUrl.Text?.Trim());
+            RefreshUI();
+
+            var usable = _threatIntel.CountUsableFeeds(_currentTier);
+            MessageBox.Show(
+                $"Feed sources saved. {usable} feed(s) now active.\n\nClick \"Update All\" to fetch from them.",
+                "Configuration Saved", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void Link_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = e.Uri.AbsoluteUri,
+                    UseShellExecute = true
+                });
+                e.Handled = true;
+            }
+            catch { }
+        }
+
         private void BtnUpgrade_Click(object sender, RoutedEventArgs e)
         {
             // Open purchase URL
@@ -219,28 +249,49 @@ namespace SkidrowKiller.Views
     {
         private readonly ThreatFeed _feed;
         private readonly LicenseTier _currentTier;
+        private readonly bool _hasAuthKey;
 
-        public FeedViewModel(ThreatFeed feed, LicenseTier currentTier)
+        public FeedViewModel(ThreatFeed feed, LicenseTier currentTier, bool hasAuthKey)
         {
             _feed = feed;
             _currentTier = currentTier;
+            _hasAuthKey = hasAuthKey;
         }
 
         public string Name => _feed.Name;
         public string TierDisplay => _feed.TierDisplay;
         public string CategoryDisplay => _feed.CategoryDisplay;
 
-        public bool IsAvailable => _feed.RequiredTier <= _currentTier;
+        public string TrustDisplay => _feed.Trust switch
+        {
+            FeedTrust.Official => "OFFICIAL",
+            FeedTrust.Curated => "CURATED",
+            _ => "COMMUNITY"
+        };
 
-        public string StatusText => IsAvailable
-            ? (_feed.LastUpdate == DateTime.MinValue ? "Not updated" : _feed.LastUpdate.ToString("g"))
-            : "Locked";
+        public Brush TrustColor => _feed.Trust switch
+        {
+            FeedTrust.Official => (Brush)Application.Current.FindResource("GreenPrimaryBrush"),
+            FeedTrust.Curated => (Brush)Application.Current.FindResource("AccentPrimaryBrush"),
+            _ => (Brush)Application.Current.FindResource("TextTertiaryBrush")
+        };
 
-        public Brush StatusColor => IsAvailable
-            ? (_feed.LastUpdate == DateTime.MinValue
-                ? (Brush)Application.Current.FindResource("TextTertiaryBrush")
-                : (Brush)Application.Current.FindResource("SuccessBrush"))
-            : (Brush)Application.Current.FindResource("TextTertiaryBrush");
+        private bool NeedsKey => _feed.RequiresAuthKey && !_hasAuthKey;
+        public bool IsAvailable => _feed.RequiredTier <= _currentTier && !NeedsKey;
+
+        public string StatusText => _feed.RequiredTier > _currentTier
+            ? "Locked"
+            : NeedsKey
+                ? "Needs Auth-Key"
+                : (_feed.LastUpdate == DateTime.MinValue ? "Not updated" : _feed.LastUpdate.ToString("g"));
+
+        public Brush StatusColor => _feed.RequiredTier > _currentTier
+            ? (Brush)Application.Current.FindResource("TextTertiaryBrush")
+            : NeedsKey
+                ? (Brush)Application.Current.FindResource("WarningBrush")
+                : (_feed.LastUpdate == DateTime.MinValue
+                    ? (Brush)Application.Current.FindResource("TextTertiaryBrush")
+                    : (Brush)Application.Current.FindResource("SuccessBrush"));
 
         public Brush TierColor => _feed.RequiredTier switch
         {

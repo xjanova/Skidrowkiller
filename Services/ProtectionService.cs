@@ -155,11 +155,13 @@ namespace SkidrowKiller.Services
                     {
                         NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite | NotifyFilters.CreationTime,
                         IncludeSubdirectories = true,
+                        InternalBufferSize = 64 * 1024,
                         EnableRaisingEvents = true
                     };
 
                     watcher.Created += OnFileCreated;
                     watcher.Renamed += OnFileRenamed;
+                    watcher.Error += OnWatcherError;
 
                     _fileWatchers.Add(watcher);
                     _filesWatched++;
@@ -170,6 +172,11 @@ namespace SkidrowKiller.Services
                     RaiseLog($"⚠️ [WATCH] Failed: {Path.GetFileName(path)} - {ex.Message}");
                 }
             }
+        }
+
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            RaiseLog($"⚠️ [WATCH] Monitoring degraded — some file events may have been missed ({e.GetException()?.Message}).");
         }
 
         private void OnFileCreated(object sender, FileSystemEventArgs e)

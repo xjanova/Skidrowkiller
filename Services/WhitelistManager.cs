@@ -1,4 +1,5 @@
 using System.IO;
+using System.Security.Cryptography;
 using SkidrowKiller.Models;
 
 namespace SkidrowKiller.Services
@@ -6,6 +7,7 @@ namespace SkidrowKiller.Services
     public class WhitelistManager
     {
         private readonly SettingsDatabase? _db;
+        private readonly ReputationService? _reputation;
         private readonly object _lock = new();
 
         // System paths that should NEVER be deleted
@@ -39,9 +41,10 @@ namespace SkidrowKiller.Services
         private readonly string _selfPath;
         private readonly string _selfDirectory;
 
-        public WhitelistManager(SettingsDatabase? db = null)
+        public WhitelistManager(SettingsDatabase? db = null, ReputationService? reputation = null)
         {
             _db = db;
+            _reputation = reputation;
 
             // Self-protection: get our own path to avoid flagging ourselves
             _selfPath = Environment.ProcessPath ?? "";
@@ -110,6 +113,26 @@ namespace SkidrowKiller.Services
             {
                 _db?.AddToWhitelist(path, reason, isPattern);
             }
+
+            // LEARNING: trusting a concrete file is a strong "good" signal. Bind it to the file's
+            // SHA-256 so the trust follows the bytes, not the path (a different file later occupying
+            // the same path does NOT inherit the trust).
+            if (_reputation != null && !isPattern)
+            {
+                try
+                {
+                    if (File.Exists(path))
+                        _reputation.RecordWhitelistAdd(ComputeSha256(path), path);
+                }
+                catch { /* learning is best-effort, never block a whitelist add */ }
+            }
+        }
+
+        private static string ComputeSha256(string filePath)
+        {
+            using var sha = SHA256.Create();
+            using var stream = File.OpenRead(filePath);
+            return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
         }
 
         public void RemoveFromWhitelist(string path)

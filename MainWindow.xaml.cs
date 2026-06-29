@@ -30,7 +30,9 @@ namespace SkidrowKiller
         private readonly ILogger _logger;
 
         private readonly ThreatIntelligenceService _threatIntel;
+        private readonly SignatureUpdateService _signatureUpdate;
         private readonly SettingsDatabase _settingsDb;
+        private readonly ReputationService _reputation;
 
         private Button? _activeNavButton;
         private ScanView? _scanView;
@@ -64,13 +66,16 @@ namespace SkidrowKiller
                 // Initialize database first (required for other services)
                 _settingsDb = new SettingsDatabase();
 
+                // Local learning layer (reputation) — shared by analyzer, whitelist and quarantine
+                _reputation = new ReputationService();
+
                 // Initialize services
-                _whitelistManager = new WhitelistManager(_settingsDb);
+                _whitelistManager = new WhitelistManager(_settingsDb, _reputation);
                 _backupManager = new BackupManager(_settingsDb);
-                _analyzer = new ThreatAnalyzer(_whitelistManager);
+                _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
                 _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
-                _quarantine = new QuarantineService(_settingsDb);
+                _quarantine = new QuarantineService(_settingsDb, _reputation);
                 _licenseService = new LicenseService(_settingsDb);
                 _networkProtection = new NetworkProtectionService(_analyzer);
                 _selfProtection = new SelfProtectionService();
@@ -79,7 +84,17 @@ namespace SkidrowKiller
                 _ransomwareProtection = new RansomwareProtectionService(_settingsDb);
                 _scheduledScan = new ScheduledScanService(_scanner, _settingsDb);
                 _browserProtection = new BrowserProtectionService();
-                _threatIntel = new ThreatIntelligenceService();
+                _threatIntel = new ThreatIntelligenceService(_settingsDb);
+
+                // Signature (signatures.json) auto-updater — reloads the live DB after a verified download.
+                _signatureUpdate = new SignatureUpdateService();
+                _signatureUpdate.AttachSignatureDatabase(_analyzer.SignatureDatabase);
+                var updCfg = AppConfiguration.Settings.Updates;
+                if (!string.IsNullOrWhiteSpace(updCfg.UpdateCheckUrl))
+                    _signatureUpdate.Configure(updCfg.UpdateCheckUrl);
+                _signatureUpdate.AutoUpdate = updCfg.AutoDownloadUpdates;
+                if (updCfg.AutoDownloadUpdates)
+                    _signatureUpdate.StartAutoUpdate();
 
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
@@ -239,6 +254,9 @@ namespace SkidrowKiller
 
         private void ThreatIntel_UpdateCompleted(object? sender, ThreatIntelCompleteEventArgs e)
         {
+            // Re-import the freshly downloaded hashes into the live scanner so an update takes effect now.
+            _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+
             Dispatcher.Invoke(() =>
             {
                 UpdateStatusBarThreatIntel();
@@ -253,6 +271,34 @@ namespace SkidrowKiller
         {
             try
             {
+                // Let stale local reputation decay toward neutral so old mistakes heal over time.
+                try { _reputation.DecayOldReputations(); } catch { /* non-critical */ }
+
+                // Threat-intel library: make the downloaded hashes ACTUALLY used by the scanner, and
+                // (optionally) refresh feeds in the background on startup.
+                try
+                {
+                    var ti = AppConfiguration.Settings.ThreatIntel;
+                    if (ti.AutoUpdateOnStartup)
+                    {
+                        _ = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                await _threatIntel.UpdateAllAsync(_licenseService.GetCurrentTier());
+                                await _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                            }
+                            catch (Exception ex) { _logger.Warning(ex, "Startup threat-intel update failed"); }
+                        });
+                    }
+                    else
+                    {
+                        // Import whatever is already cached (no network).
+                        _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                    }
+                }
+                catch (Exception ex) { _logger.Warning(ex, "Threat-intel startup wiring failed"); }
+
                 // Load user settings from SQLite database
                 var settings = new Views.UserSettings
                 {
@@ -700,6 +746,8 @@ namespace SkidrowKiller
                 _usbScan?.Dispose();
                 _ransomwareProtection?.Dispose();
                 _scheduledScan?.Dispose();
+                _signatureUpdate?.Dispose();
+                _threatIntel?.Dispose();
 
                 // Dispose settings database
                 _settingsDb?.Dispose();

@@ -199,6 +199,9 @@ namespace SkidrowKiller.Services
                     NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite |
                                    NotifyFilters.Size | NotifyFilters.CreationTime,
                     IncludeSubdirectories = true,
+                    // A ransomware mass-encrypt burst easily overflows the default 8KB buffer; raise it so
+                    // the very event this service exists to catch is not silently dropped by Windows.
+                    InternalBufferSize = 64 * 1024,
                     EnableRaisingEvents = true
                 };
 
@@ -206,6 +209,7 @@ namespace SkidrowKiller.Services
                 watcher.Renamed += OnFileRenamed;
                 watcher.Deleted += OnFileDeleted;
                 watcher.Created += OnFileCreated;
+                watcher.Error += OnWatcherError;
 
                 _watchers.Add(watcher);
             }
@@ -213,6 +217,12 @@ namespace SkidrowKiller.Services
             {
                 RaiseLog($"Watcher setup error for {folder}: {ex.Message}");
             }
+        }
+
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            // Buffer overflow / lost events = degraded monitoring. Surface it instead of failing silently.
+            RaiseLog($"⚠️ [WATCH] Monitoring degraded — some file events may have been missed ({e.GetException()?.Message}).");
         }
 
         private void OnFileChanged(object sender, FileSystemEventArgs e)

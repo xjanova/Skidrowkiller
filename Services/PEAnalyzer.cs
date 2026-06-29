@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace SkidrowKiller.Services
@@ -60,8 +61,28 @@ namespace SkidrowKiller.Services
                     return result;
                 }
 
-                // Read file content
-                var content = await File.ReadAllBytesAsync(filePath);
+                // Cap the in-memory read so a single huge file cannot stall the scan or exhaust memory.
+                // PE header/section/import analysis only needs the front of the file; very large executables
+                // (game bundles, installers) are read up to this cap, which is plenty for structural analysis.
+                const long MaxAnalyzeBytes = 100L * 1024 * 1024; // 100 MB
+                byte[] content;
+                if (fileInfo.Length > MaxAnalyzeBytes)
+                {
+                    content = new byte[MaxAnalyzeBytes];
+                    using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    int read = 0;
+                    while (read < content.Length)
+                    {
+                        int n = await fs.ReadAsync(content.AsMemory(read, content.Length - read));
+                        if (n == 0) break;
+                        read += n;
+                    }
+                }
+                else
+                {
+                    // Read file content
+                    content = await File.ReadAllBytesAsync(filePath);
+                }
 
                 // Parse PE structure
                 if (!ParsePEHeader(content, result))
@@ -419,8 +440,146 @@ namespace SkidrowKiller.Services
                     result.SuspiciousIndicators.Add("Anti-debugging techniques detected");
                     result.DetectedTechniques.Add("Anti-Debug");
                 }
+
+                // Real import-table parse → imphash (variant fingerprint) + empty-IAT packed heuristic.
+                ComputeImphashAndCounts(content, result);
+
+                // A real PE that imports almost nothing but has high entropy is a classic packed/protected
+                // sample whose true imports are hidden until unpacked at runtime — a stealthy "ghost".
+                if (!result.IsDotNet && result.ImportedFunctionCount is > 0 and <= 5 &&
+                    (result.OverallEntropy > 7.0 || result.Sections.Any(s => s.Entropy > 7.2)))
+                {
+                    result.IsPacked = true;
+                    if (!result.DetectedTechniques.Contains("Packed"))
+                        result.DetectedTechniques.Add("Packed");
+                    result.SuspiciousIndicators.Add(
+                        $"Near-empty import table ({result.ImportedFunctionCount} imports) with high entropy — likely packed/obfuscated");
+                }
             }
             catch { }
+        }
+
+        /// <summary>
+        /// Parses the real import directory to compute the import hash (imphash) used industry-wide to
+        /// cluster malware variants, plus accurate imported DLL/function counts. Fully bounds-checked;
+        /// any failure simply leaves the substring-based import analysis above in place.
+        /// </summary>
+        private void ComputeImphashAndCounts(byte[] content, PEAnalysisResult result)
+        {
+            try
+            {
+                var optHdr = result.PEHeaderOffset + 24;
+                // Data directory 1 = Import Table. Directory array starts at +96 (PE32) / +112 (PE64).
+                var importDirEntry = optHdr + (result.Is64Bit ? 112 : 96) + (1 * 8);
+                if (importDirEntry + 8 > content.Length) return;
+
+                var importRva = BitConverter.ToUInt32(content, importDirEntry);
+                if (importRva == 0) return;
+
+                var descOffset = RvaToOffset(importRva, result);
+                if (descOffset < 0) return;
+
+                var parts = new List<string>();
+                var dlls = 0;
+                var funcs = 0;
+
+                // Walk IMAGE_IMPORT_DESCRIPTOR[] (20 bytes each) until an all-zero terminator.
+                for (var guard = 0; guard < 4096; guard++)
+                {
+                    if (descOffset + 20 > content.Length) break;
+
+                    var originalFirstThunk = BitConverter.ToUInt32(content, descOffset);
+                    var nameRva = BitConverter.ToUInt32(content, descOffset + 12);
+                    var firstThunk = BitConverter.ToUInt32(content, descOffset + 16);
+
+                    if (originalFirstThunk == 0 && nameRva == 0 && firstThunk == 0) break; // terminator
+
+                    var dllName = ReadAsciiZ(content, RvaToOffset(nameRva, result), 256);
+                    if (string.IsNullOrEmpty(dllName)) { descOffset += 20; continue; }
+
+                    // imphash uses the DLL base name without extension, lowercased.
+                    var dllBase = dllName.ToLowerInvariant();
+                    var dot = dllBase.LastIndexOf('.');
+                    if (dot > 0) dllBase = dllBase[..dot];
+
+                    dlls++;
+
+                    var thunkRva = originalFirstThunk != 0 ? originalFirstThunk : firstThunk;
+                    var thunkOffset = RvaToOffset(thunkRva, result);
+                    if (thunkOffset < 0) { descOffset += 20; continue; }
+
+                    var entrySize = result.Is64Bit ? 8 : 4;
+                    var ordinalFlag = result.Is64Bit ? 0x8000000000000000UL : 0x80000000UL;
+
+                    for (var t = 0; t < 8192; t++)
+                    {
+                        var pos = thunkOffset + t * entrySize;
+                        if (pos + entrySize > content.Length) break;
+
+                        var thunk = result.Is64Bit ? BitConverter.ToUInt64(content, pos) : BitConverter.ToUInt32(content, pos);
+                        if (thunk == 0) break; // end of this DLL's thunks
+
+                        string funcName;
+                        if ((thunk & ordinalFlag) != 0)
+                        {
+                            funcName = "ord" + (thunk & 0xffff).ToString();
+                        }
+                        else
+                        {
+                            // thunk low 31 bits = RVA to IMAGE_IMPORT_BY_NAME (2-byte hint + name)
+                            var byNameOffset = RvaToOffset((uint)(thunk & 0x7fffffff), result);
+                            if (byNameOffset < 0) continue;
+                            funcName = ReadAsciiZ(content, byNameOffset + 2, 256).ToLowerInvariant();
+                            if (string.IsNullOrEmpty(funcName)) continue;
+                        }
+
+                        parts.Add($"{dllBase}.{funcName}");
+                        funcs++;
+                    }
+
+                    descOffset += 20;
+                }
+
+                result.ImportedDllCount = dlls;
+                result.ImportedFunctionCount = funcs;
+
+                if (parts.Count > 0)
+                {
+                    var joined = string.Join(",", parts);
+                    var hash = MD5.HashData(Encoding.ASCII.GetBytes(joined));
+                    result.Imphash = Convert.ToHexString(hash).ToLowerInvariant();
+                }
+            }
+            catch { /* leave substring-based analysis as the fallback */ }
+        }
+
+        private static int RvaToOffset(uint rva, PEAnalysisResult result)
+        {
+            if (rva == 0) return -1;
+            foreach (var s in result.Sections)
+            {
+                var size = s.RawDataSize > 0 ? s.RawDataSize : s.VirtualSize;
+                if (rva >= s.VirtualAddress && rva < s.VirtualAddress + size)
+                {
+                    return (int)(s.RawDataPointer + (rva - s.VirtualAddress));
+                }
+            }
+            return -1;
+        }
+
+        private static string ReadAsciiZ(byte[] content, int offset, int max)
+        {
+            if (offset < 0 || offset >= content.Length) return string.Empty;
+            var end = Math.Min(content.Length, offset + max);
+            var sb = new StringBuilder();
+            for (var i = offset; i < end; i++)
+            {
+                var b = content[i];
+                if (b == 0) break;
+                if (b < 32 || b > 126) return sb.ToString(); // stop at non-printable
+                sb.Append((char)b);
+            }
+            return sb.ToString();
         }
 
         private void DetectPackers(byte[] content, PEAnalysisResult result)
@@ -695,6 +854,11 @@ namespace SkidrowKiller.Services
         public bool HasEmbeddedExecutable { get; set; }
         public bool HasOverlay { get; set; }
         public int OverlaySize { get; set; }
+
+        // Import table fingerprint (variant detection + packed-ghost heuristic)
+        public string Imphash { get; set; } = string.Empty;
+        public int ImportedDllCount { get; set; }
+        public int ImportedFunctionCount { get; set; }
 
         // Suspicious indicators
         public List<string> SuspiciousImports { get; set; } = new();

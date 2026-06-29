@@ -25,9 +25,26 @@ public class ThreatIntelligenceService : IDisposable
 {
     private readonly ILogger<ThreatIntelligenceService>? _logger;
     private readonly HttpClient _httpClient;
+    private readonly SettingsDatabase? _settingsDb;
     private readonly string _dataPath;
     private readonly string _cachePath;
     private bool _disposed;
+
+    // abuse.ch now requires a free Auth-Key for its downloads; supplied via settings.
+    private string _abuseChAuthKey = "";
+    // Optional self-hosted, integrity-verified "official" Skidrow feed (highest trust).
+    private string _officialFeedUrl = "";
+
+    private const string KeyAbuseCh = "ThreatIntel.AbuseChAuthKey";
+    private const string KeyOfficialUrl = "ThreatIntel.OfficialFeedUrl";
+
+    /// <summary>The configured abuse.ch Auth-Key (empty if none).</summary>
+    public string AbuseChAuthKey => _abuseChAuthKey;
+    /// <summary>The configured official integrity-verified feed URL (empty if none).</summary>
+    public string OfficialFeedUrl => _officialFeedUrl;
+
+    private const int MaxDownloadRetries = 3;
+    private static readonly TimeSpan PerFeedTimeout = TimeSpan.FromMinutes(2);
 
     // Feed sources with their update frequencies
     private readonly List<ThreatFeed> _feeds;
@@ -42,9 +59,10 @@ public class ThreatIntelligenceService : IDisposable
     public DateTime LastUpdate { get; private set; }
     public ThreatIntelStats Stats { get; private set; } = new();
 
-    public ThreatIntelligenceService(ILogger<ThreatIntelligenceService>? logger = null)
+    public ThreatIntelligenceService(SettingsDatabase? settingsDb = null, ILogger<ThreatIntelligenceService>? logger = null)
     {
         _logger = logger;
+        _settingsDb = settingsDb;
 
         _httpClient = new HttpClient();
         _httpClient.DefaultRequestHeaders.Add("User-Agent", "SkidrowKiller-ThreatIntel/1.0");
@@ -59,15 +77,82 @@ public class ThreatIntelligenceService : IDisposable
         // Initialize feeds
         _feeds = InitializeFeeds();
 
+        // Resolve auth key / official feed URL: saved settings (DB) take precedence over appsettings.json.
+        try
+        {
+            var ti = AppConfiguration.Settings.ThreatIntel;
+            var key = _settingsDb?.GetSetting(KeyAbuseCh);
+            var url = _settingsDb?.GetSetting(KeyOfficialUrl);
+            Configure(
+                string.IsNullOrWhiteSpace(key) ? ti.AbuseChAuthKey : key,
+                string.IsNullOrWhiteSpace(url) ? ti.OfficialFeedUrl : url);
+        }
+        catch { /* config optional */ }
+
         // Load last update time
         LoadStats();
     }
 
+    /// <summary>
+    /// Persist the Auth-Key / official feed URL and apply them immediately (used by the UI).
+    /// </summary>
+    public void SaveConfiguration(string? abuseChAuthKey, string? officialFeedUrl)
+    {
+        try
+        {
+            _settingsDb?.SetSetting(KeyAbuseCh, abuseChAuthKey ?? "", "threatintel");
+            _settingsDb?.SetSetting(KeyOfficialUrl, officialFeedUrl ?? "", "threatintel");
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to persist threat-intel configuration");
+        }
+        Configure(abuseChAuthKey, officialFeedUrl);
+    }
+
+    /// <summary>Number of feeds currently usable for the given tier (respects Auth-Key availability).</summary>
+    public int CountUsableFeeds(LicenseTier tier)
+    {
+        var hasKey = !string.IsNullOrEmpty(_abuseChAuthKey);
+        return _feeds.Count(f => f.Enabled && f.RequiredTier <= tier && (!f.RequiresAuthKey || hasKey));
+    }
+
+    /// <summary>
+    /// Supply the optional abuse.ch Auth-Key and the official integrity-verified feed URL.
+    /// Feeds that require a key are skipped (not failed) when no key is provided.
+    /// </summary>
+    public void Configure(string? abuseChAuthKey, string? officialFeedUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(abuseChAuthKey)) _abuseChAuthKey = abuseChAuthKey.Trim();
+
+        if (!string.IsNullOrWhiteSpace(officialFeedUrl) && IsHttps(officialFeedUrl))
+        {
+            _officialFeedUrl = officialFeedUrl.Trim();
+            // Register / refresh the official feed (highest trust, integrity-verified via .sha256 sidecar).
+            _feeds.RemoveAll(f => f.Id == "official_skidrow");
+            _feeds.Insert(0, new ThreatFeed
+            {
+                Id = "official_skidrow",
+                Name = "Skidrow Official Signature Feed",
+                Category = FeedCategory.HashDatabase,
+                Url = _officialFeedUrl,
+                Sha256Url = _officialFeedUrl + ".sha256",
+                Trust = FeedTrust.Official,
+                UpdateInterval = TimeSpan.FromHours(3),
+                RequiredTier = LicenseTier.Free,
+                Parser = ParseMalwareBazaarHashes
+            });
+        }
+    }
+
+    private static bool IsHttps(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps;
+
     private List<ThreatFeed> InitializeFeeds()
     {
-        return new List<ThreatFeed>
+        var feeds = new List<ThreatFeed>
         {
-            // === abuse.ch Feeds (Free, no API key required) ===
+            // === abuse.ch Feeds (now require a free Auth-Key; skipped gracefully if none configured) ===
             new ThreatFeed
             {
                 Id = "malwarebazaar_md5",
@@ -207,8 +292,94 @@ public class ThreatIntelligenceService : IDisposable
                 UpdateInterval = TimeSpan.FromHours(12),
                 RequiredTier = LicenseTier.Pro,
                 Parser = ParseSSLIPBlacklist
+            },
+
+            // === Additional KEYLESS, reputable channels (work out of the box) ===
+            new ThreatFeed
+            {
+                Id = "digitalside_hashes",
+                Name = "DigitalSide OSINT Hashes",
+                Category = FeedCategory.HashDatabase,
+                Url = "https://osint.digitalside.it/Threat-Intel/lists/latesthashes.txt",
+                MirrorUrls = { "https://raw.githubusercontent.com/davidonzo/Threat-Intel/master/lists/latesthashes.txt" },
+                UpdateInterval = TimeSpan.FromHours(6),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Curated,
+                Parser = ParseMalwareBazaarHashes
+            },
+            new ThreatFeed
+            {
+                Id = "digitalside_urls",
+                Name = "DigitalSide OSINT URLs",
+                Category = FeedCategory.MaliciousURL,
+                Url = "https://osint.digitalside.it/Threat-Intel/lists/latesturls.txt",
+                MirrorUrls = { "https://raw.githubusercontent.com/davidonzo/Threat-Intel/master/lists/latesturls.txt" },
+                UpdateInterval = TimeSpan.FromHours(6),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Curated,
+                Parser = ParsePlainUrlList
+            },
+            new ThreatFeed
+            {
+                Id = "digitalside_ips",
+                Name = "DigitalSide OSINT IPs",
+                Category = FeedCategory.MaliciousIP,
+                Url = "https://osint.digitalside.it/Threat-Intel/lists/latestips.txt",
+                MirrorUrls = { "https://raw.githubusercontent.com/davidonzo/Threat-Intel/master/lists/latestips.txt" },
+                UpdateInterval = TimeSpan.FromHours(6),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Curated,
+                Parser = ParseFeodoIPs
+            },
+            new ThreatFeed
+            {
+                Id = "cins_army",
+                Name = "CINS Army Malicious IPs",
+                Category = FeedCategory.MaliciousIP,
+                Url = "https://cinsscore.com/list/ci-badguys.txt",
+                UpdateInterval = TimeSpan.FromHours(12),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Community,
+                Parser = ParseFeodoIPs
+            },
+            new ThreatFeed
+            {
+                Id = "blocklist_de",
+                Name = "blocklist.de Attackers",
+                Category = FeedCategory.MaliciousIP,
+                Url = "https://lists.blocklist.de/lists/all.txt",
+                UpdateInterval = TimeSpan.FromHours(12),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Community,
+                Parser = ParseFeodoIPs
+            },
+            new ThreatFeed
+            {
+                Id = "et_compromised",
+                Name = "Emerging Threats Compromised IPs",
+                Category = FeedCategory.MaliciousIP,
+                Url = "https://rules.emergingthreats.net/blockrules/compromised-ips.txt",
+                UpdateInterval = TimeSpan.FromHours(12),
+                RequiredTier = LicenseTier.Free,
+                Trust = FeedTrust.Community,
+                Parser = ParseFeodoIPs
             }
         };
+
+        // abuse.ch downloads now require a free Auth-Key — mark those feeds so they are skipped
+        // (not failed) when no key is configured, instead of spamming 401 errors.
+        foreach (var f in feeds)
+        {
+            if (f.Url.Contains("bazaar.abuse.ch") || f.Url.Contains("threatfox.abuse.ch") ||
+                f.Url.Contains("urlhaus.abuse.ch"))
+            {
+                f.RequiresAuthKey = true;
+            }
+            // abuse.ch sources are well-curated.
+            if (f.Url.Contains("abuse.ch")) f.Trust = FeedTrust.Curated;
+        }
+
+        return feeds;
     }
 
     /// <summary>
@@ -233,11 +404,18 @@ public class ThreatIntelligenceService : IDisposable
 
         try
         {
-            // Filter feeds based on tier
-            var availableFeeds = _feeds.Where(f => f.RequiredTier <= tier).ToList();
+            // Filter feeds by tier, enabled state, and Auth-Key availability.
+            var hasAbuseKey = !string.IsNullOrEmpty(_abuseChAuthKey);
+            var availableFeeds = _feeds
+                .Where(f => f.Enabled && f.RequiredTier <= tier && (!f.RequiresAuthKey || hasAbuseKey))
+                .ToList();
+            var skippedNoKey = _feeds.Count(f => f.Enabled && f.RequiredTier <= tier && f.RequiresAuthKey && !hasAbuseKey);
             var totalFeeds = availableFeeds.Count;
             var completedFeeds = 0;
             var skippedFeeds = 0;
+
+            if (skippedNoKey > 0)
+                _logger?.LogInformation("{Count} abuse.ch feed(s) skipped — set ThreatIntel.AbuseChAuthKey to enable them", skippedNoKey);
 
             _logger?.LogInformation("Starting threat intelligence update. {Count} feeds available for {Tier} tier",
                 totalFeeds, tier);
@@ -362,48 +540,113 @@ public class ThreatIntelligenceService : IDisposable
         ThreatFeed feed,
         CancellationToken cancellationToken)
     {
-        var result = new FeedUpdateResult();
+        var cachePath = GetCachePath(feed);
+        var isZip = feed.Url.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+        var destPath = isZip ? cachePath + ".zip" : cachePath;
 
+        // Primary URL first, then mirrors as fallback.
+        var urls = new List<string> { feed.Url };
+        urls.AddRange(feed.MirrorUrls);
+
+        Exception? lastError = null;
+
+        foreach (var url in urls)
+        {
+            // Reliability/trust: never fetch threat data over plain HTTP (tamper/MITM risk).
+            if (!IsHttps(url))
+            {
+                lastError = new InvalidOperationException($"Refused non-HTTPS feed URL: {url}");
+                continue;
+            }
+
+            for (int attempt = 1; attempt <= MaxDownloadRetries; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    timeoutCts.CancelAfter(PerFeedTimeout);
+
+                    await DownloadToFileAsync(url, destPath, feed, timeoutCts.Token);
+
+                    // Optional integrity verification against a .sha256 sidecar (used by the official channel).
+                    if (!string.IsNullOrEmpty(feed.Sha256Url))
+                    {
+                        if (!await VerifySha256Async(destPath, feed.Sha256Url!, timeoutCts.Token))
+                        {
+                            TryDelete(destPath);
+                            lastError = new InvalidOperationException("SHA-256 integrity check failed");
+                            break; // do not trust this source; try the next mirror
+                        }
+                    }
+
+                    var parsed = await feed.Parser(destPath, feed);
+                    parsed.Success = string.IsNullOrEmpty(parsed.Error);
+                    return parsed;
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    lastError = new TimeoutException($"Timed out after {PerFeedTimeout.TotalSeconds:F0}s");
+                }
+                catch (Exception ex)
+                {
+                    lastError = ex;
+                }
+
+                if (attempt < MaxDownloadRetries)
+                    await Task.Delay(TimeSpan.FromSeconds(attempt * 2), cancellationToken); // linear backoff
+            }
+        }
+
+        return new FeedUpdateResult { Success = false, Error = lastError?.Message ?? "All sources failed" };
+    }
+
+    private async Task DownloadToFileAsync(string url, string destPath, ThreatFeed feed, CancellationToken ct)
+    {
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        if (feed.RequiresAuthKey && !string.IsNullOrEmpty(_abuseChAuthKey))
+            req.Headers.TryAddWithoutValidation("Auth-Key", _abuseChAuthKey);
+
+        using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        response.EnsureSuccessStatusCode();
+
+        // Write to a temp file then atomically move, so an interrupted download never corrupts the cache.
+        var tmp = destPath + ".tmp";
+        await using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+        await using (var stream = await response.Content.ReadAsStreamAsync(ct))
+        {
+            await stream.CopyToAsync(fs, ct);
+        }
+
+        if (File.Exists(destPath)) File.Delete(destPath);
+        File.Move(tmp, destPath);
+    }
+
+    private async Task<bool> VerifySha256Async(string filePath, string sha256Url, CancellationToken ct)
+    {
         try
         {
-            // Download content
-            var response = await _httpClient.GetAsync(feed.Url, cancellationToken);
-            response.EnsureSuccessStatusCode();
+            if (!IsHttps(sha256Url)) return false;
+            var raw = await _httpClient.GetStringAsync(sha256Url, ct);
+            var expected = raw.Trim()
+                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault()?.ToLowerInvariant();
+            if (string.IsNullOrEmpty(expected) || expected.Length != 64) return false;
 
-            var cachePath = GetCachePath(feed);
-
-            if (feed.Url.EndsWith(".zip"))
-            {
-                // Handle ZIP files
-                var zipBytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
-                var zipPath = cachePath + ".zip";
-                await File.WriteAllBytesAsync(zipPath, zipBytes, cancellationToken);
-
-                result = await feed.Parser(zipPath, feed);
-            }
-            else
-            {
-                // Handle text/CSV files
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                await File.WriteAllTextAsync(cachePath, content, cancellationToken);
-
-                result = await feed.Parser(cachePath, feed);
-            }
-
-            result.Success = true;
+            using var sha = SHA256.Create();
+            await using var fs = File.OpenRead(filePath);
+            var actual = Convert.ToHexString(await sha.ComputeHashAsync(fs, ct)).ToLowerInvariant();
+            return actual == expected;
         }
-        catch (HttpRequestException ex)
+        catch
         {
-            result.Success = false;
-            result.Error = $"Network error: {ex.Message}";
+            return false;
         }
-        catch (Exception ex)
-        {
-            result.Success = false;
-            result.Error = ex.Message;
-        }
+    }
 
-        return result;
+    private static void TryDelete(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
     private bool NeedsUpdate(ThreatFeed feed)
@@ -540,6 +783,28 @@ public class ThreatIntelligenceService : IDisposable
                 {
                     urls.Add(url);
                 }
+            }
+        }
+
+        await SaveUrlsAsync(feed.Id, urls);
+        result.NewUrls = urls.Count;
+        result.TotalItems = urls.Count;
+        return result;
+    }
+
+    private async Task<FeedUpdateResult> ParsePlainUrlList(string path, ThreatFeed feed)
+    {
+        var result = new FeedUpdateResult();
+        var urls = new List<string>();
+
+        foreach (var line in await File.ReadAllLinesAsync(path))
+        {
+            var s = line.Trim();
+            if (string.IsNullOrEmpty(s) || s.StartsWith("#")) continue;
+            if (s.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                s.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                urls.Add(s);
             }
         }
 
@@ -830,6 +1095,66 @@ public class ThreatIntelligenceService : IDisposable
     }
 
     /// <summary>
+    /// Import every cached malware hash into the live signature database so the downloaded
+    /// threat library is ACTUALLY used during scanning (previously hashes were downloaded but
+    /// never consulted by the scanner). Validated + capped per feed to bound memory.
+    /// Returns the number of hashes imported.
+    /// </summary>
+    public async Task<int> ImportHashesIntoAsync(MalwareSignatureDatabase db)
+    {
+        if (db == null) return 0;
+        var imported = 0;
+
+        try
+        {
+            // All hash files written by the various parsers (e.g. "<feedId>_hashes.txt").
+            var hashFiles = Directory.Exists(_dataPath)
+                ? Directory.GetFiles(_dataPath, "*_hashes.txt")
+                : Array.Empty<string>();
+
+            foreach (var file in hashFiles)
+            {
+                // Attribute the source feed (for the malware name) where we can.
+                var feedId = Path.GetFileNameWithoutExtension(file).Replace("_hashes", "");
+                var feed = _feeds.FirstOrDefault(f => feedId.StartsWith(f.Id, StringComparison.OrdinalIgnoreCase));
+                var sourceName = feed?.Name ?? "ThreatIntel";
+                var cap = feed?.MaxItems ?? 0;
+
+                var count = 0;
+                foreach (var line in await File.ReadAllLinesAsync(file))
+                {
+                    var hash = line.Trim().ToLowerInvariant();
+                    if (hash.Length == 32)
+                    {
+                        db.AddHash(hash, HashType.MD5, "Intel.Malware", sourceName, 9);
+                        imported++; count++;
+                    }
+                    else if (hash.Length == 64)
+                    {
+                        db.AddHash(hash, HashType.SHA256, "Intel.Malware", sourceName, 9);
+                        imported++; count++;
+                    }
+                    // (AddHash rejects anything non-hex, so junk lines are dropped silently.)
+
+                    if (cap > 0 && count >= cap)
+                    {
+                        _logger?.LogInformation("Hash import for {Feed} capped at {Cap}", sourceName, cap);
+                        break;
+                    }
+                }
+            }
+
+            _logger?.LogInformation("Imported {Count} threat-intel hashes into the scanner", imported);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "Failed to import threat-intel hashes");
+        }
+
+        return imported;
+    }
+
+    /// <summary>
     /// Get all available feeds
     /// </summary>
     public IReadOnlyList<ThreatFeed> GetFeeds() => _feeds.AsReadOnly();
@@ -869,12 +1194,35 @@ public enum FeedCategory
     Signatures
 }
 
+public enum FeedTrust
+{
+    Official,    // our own signed/checksummed channel — highest trust
+    Curated,     // well-known reputable sources (abuse.ch, DigitalSide, ClamAV)
+    Community    // community/aggregated lists — useful but noisier
+}
+
 public class ThreatFeed
 {
     public string Id { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public FeedCategory Category { get; set; }
     public string Url { get; set; } = string.Empty;
+
+    /// <summary>Fallback mirrors tried in order if the primary URL fails.</summary>
+    public List<string> MirrorUrls { get; set; } = new();
+
+    /// <summary>Optional URL of a .sha256 sidecar for integrity verification of the download.</summary>
+    public string? Sha256Url { get; set; }
+
+    /// <summary>If set, sent as the abuse.ch "Auth-Key" header. Feeds needing a key are skipped when it is empty.</summary>
+    public bool RequiresAuthKey { get; set; }
+
+    /// <summary>Hard cap on imported items from this feed to bound memory (0 = unlimited).</summary>
+    public int MaxItems { get; set; }
+
+    public FeedTrust Trust { get; set; } = FeedTrust.Curated;
+    public bool Enabled { get; set; } = true;
+
     public TimeSpan UpdateInterval { get; set; }
     public LicenseTier RequiredTier { get; set; }
     public DateTime LastUpdate { get; set; }

@@ -630,6 +630,16 @@
       "RegistryPatterns": [],
       "ThreatLevel": 9,
       "Description": "Network worm indicators"
+    },
+    {
+      "Name": "Ransomware Anti-Recovery",
+      "Category": "Ransomware",
+      "FileNamePatterns": [],
+      "ProcessNamePatterns": [],
+      "RegistryPatterns": [],
+      "ContentPatterns": ["vssadmin delete shadows", "wmic shadowcopy delete", "wbadmin delete catalog", "wbadmin delete systemstatebackup", "bcdedit /set {default} recoveryenabled no", "bootstatuspolicy ignoreallfailures", "fsutil usn deletejournal", "cipher /w:"],
+      "ThreatLevel": 10,
+      "Description": "Destroys shadow copies / backups / recovery — classic ransomware anti-recovery behavior"
     }
   ],
   "BoosterPatterns": [

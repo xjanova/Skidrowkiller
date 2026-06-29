@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -28,6 +29,9 @@ public class SignatureUpdateService : IDisposable
     private readonly string _signaturesPath;
     private readonly string _backupPath;
     private readonly string _versionPath;
+
+    // Live signature DB to reload after a successful download (so updates apply without a restart).
+    private MalwareSignatureDatabase? _signatureDb;
 
     // Settings
     public TimeSpan UpdateInterval { get; set; } = TimeSpan.FromHours(6);
@@ -76,6 +80,11 @@ public class SignatureUpdateService : IDisposable
         if (!string.IsNullOrEmpty(signatureDownloadUrl))
             _signatureDownloadUrl = signatureDownloadUrl;
     }
+
+    /// <summary>
+    /// Attach the live signature database so it is reloaded automatically after a successful update.
+    /// </summary>
+    public void AttachSignatureDatabase(MalwareSignatureDatabase db) => _signatureDb = db;
 
     /// <summary>
     /// Starts automatic update checking
@@ -205,6 +214,9 @@ public class SignatureUpdateService : IDisposable
                 SaveCurrentVersion();
                 LastSuccessfulUpdate = DateTime.Now;
 
+                // Apply the new signatures to the running scanner without a restart.
+                _signatureDb?.ReloadExternalSignatures();
+
                 result.Success = true;
                 result.Message = $"Updated to v{CurrentVersion}";
                 result.CurrentVersion = CurrentVersion;
@@ -306,6 +318,13 @@ public class SignatureUpdateService : IDisposable
     {
         try
         {
+            // Trust: never pull signatures over plain HTTP (tamper/MITM risk).
+            if (!IsHttps(url))
+            {
+                _logger?.LogWarning("Refused non-HTTPS signature URL: {Url}", url);
+                return false;
+            }
+
             // Backup current signatures
             if (File.Exists(_signaturesPath))
             {
@@ -327,6 +346,14 @@ public class SignatureUpdateService : IDisposable
             var tempPath = _signaturesPath + ".tmp";
             await File.WriteAllTextAsync(tempPath, content, cancellationToken);
 
+            // Optional integrity check: if a ".sha256" sidecar is published, the download must match it.
+            if (!await VerifyDownloadIntegrityAsync(tempPath, url + ".sha256", content, cancellationToken))
+            {
+                _logger?.LogWarning("Signature integrity check failed for {Url}", url);
+                try { File.Delete(tempPath); } catch { }
+                return false;
+            }
+
             // Move to final location
             if (File.Exists(_signaturesPath))
                 File.Delete(_signaturesPath);
@@ -341,6 +368,33 @@ public class SignatureUpdateService : IDisposable
         }
     }
 
+    /// <summary>
+    /// If a SHA-256 sidecar is available, verify the download against it. Absent sidecar = pass
+    /// (not all sources publish one); a present-but-mismatched sidecar fails closed.
+    /// </summary>
+    private async Task<bool> VerifyDownloadIntegrityAsync(string filePath, string sha256Url, string content, CancellationToken ct)
+    {
+        try
+        {
+            if (!IsHttps(sha256Url)) return true; // can't fetch sidecar securely → don't block
+            var resp = await _httpClient.GetAsync(sha256Url, ct);
+            if (!resp.IsSuccessStatusCode) return true; // no sidecar published
+
+            var expected = (await resp.Content.ReadAsStringAsync(ct)).Trim()
+                .Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault()?.ToLowerInvariant();
+            if (string.IsNullOrEmpty(expected) || expected.Length != 64) return true;
+
+            var actual = Convert.ToHexString(
+                SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(content))).ToLowerInvariant();
+            return actual == expected;
+        }
+        catch
+        {
+            return true; // never block an update on a flaky sidecar fetch
+        }
+    }
+
     private async Task<bool> VerifySignaturesAsync()
     {
         try
@@ -350,21 +404,20 @@ public class SignatureUpdateService : IDisposable
 
             var content = await File.ReadAllTextAsync(_signaturesPath);
 
-            // Try to parse as JSON
-            var doc = JsonDocument.Parse(content);
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
 
-            // Check for required fields
-            if (doc.RootElement.TryGetProperty("version", out _) &&
-                doc.RootElement.TryGetProperty("signatures", out var signatures))
-            {
-                // Verify we have at least some signatures
-                if (signatures.GetArrayLength() > 0)
-                {
-                    return true;
-                }
-            }
+            // Accept either PascalCase ("Signatures", as the shipped signatures.json uses) or lowercase.
+            // (The old code only checked lowercase, so verification ALWAYS failed on the real file and
+            // every downloaded update was rolled back.)
+            JsonElement signatures;
+            var hasSignatures =
+                root.TryGetProperty("Signatures", out signatures) ||
+                root.TryGetProperty("signatures", out signatures);
 
-            return false;
+            return hasSignatures
+                   && signatures.ValueKind == JsonValueKind.Array
+                   && signatures.GetArrayLength() > 0;
         }
         catch (Exception ex)
         {
@@ -372,6 +425,9 @@ public class SignatureUpdateService : IDisposable
             return false;
         }
     }
+
+    private static bool IsHttps(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps;
 
     private async Task RollbackAsync()
     {
@@ -472,9 +528,9 @@ public class SignatureUpdateService : IDisposable
     /// </summary>
     public async Task<bool> ReloadSignaturesAsync()
     {
-        // This would trigger the MalwareSignatureDatabase to reload
-        // For now, just verify the file exists and is valid
-        return await VerifySignaturesAsync();
+        var ok = await VerifySignaturesAsync();
+        if (ok) _signatureDb?.ReloadExternalSignatures();
+        return ok;
     }
 
     public void Dispose()
