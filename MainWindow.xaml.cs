@@ -279,10 +279,21 @@ namespace SkidrowKiller
             });
         }
 
+        private void LoadVariantBlocklistsIntoAnalyzer()
+        {
+            try
+            {
+                _analyzer.SetBadImphashes(_threatIntel.GetBadImphashes());
+                _analyzer.SetBadFuzzyHashes(_threatIntel.GetBadFuzzyHashes());
+            }
+            catch (Exception ex) { _logger.Debug(ex, "Loading variant blocklists failed"); }
+        }
+
         private void ThreatIntel_UpdateCompleted(object? sender, ThreatIntelCompleteEventArgs e)
         {
             // Re-import the freshly downloaded hashes into the live scanner so an update takes effect now.
             _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+            LoadVariantBlocklistsIntoAnalyzer();
 
             Dispatcher.Invoke(() =>
             {
@@ -328,6 +339,7 @@ namespace SkidrowKiller
                             {
                                 await _threatIntel.UpdateAllAsync(_licenseService.GetCurrentTier());
                                 await _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                                LoadVariantBlocklistsIntoAnalyzer();
                             }
                             catch (Exception ex) { _logger.Warning(ex, "Startup threat-intel update failed"); }
                         });
@@ -336,6 +348,7 @@ namespace SkidrowKiller
                     {
                         // Import whatever is already cached (no network).
                         _ = _threatIntel.ImportHashesIntoAsync(_analyzer.SignatureDatabase);
+                        LoadVariantBlocklistsIntoAnalyzer();
                     }
                 }
                 catch (Exception ex) { _logger.Warning(ex, "Threat-intel startup wiring failed"); }
