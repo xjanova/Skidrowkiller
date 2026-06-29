@@ -35,8 +35,10 @@ namespace SkidrowKiller
         private readonly DefenderIntegrationService _defender;
         private readonly SettingsDatabase _settingsDb;
         private readonly ReputationService _reputation;
+        private readonly SelfTestService _selfTest;
 
         private Button? _activeNavButton;
+        private HomeView? _homeView;
         private ScanView? _scanView;
         private MonitorView? _monitorView;
         private ThreatsView? _threatsView;
@@ -78,6 +80,7 @@ namespace SkidrowKiller
                 _whitelistManager = new WhitelistManager(_settingsDb, _reputation);
                 _backupManager = new BackupManager(_settingsDb);
                 _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
+                _selfTest = new SelfTestService(_analyzer);
                 _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
                 _processGuard = new RealtimeProcessGuard(_analyzer, _whitelistManager);
@@ -111,6 +114,9 @@ namespace SkidrowKiller
                 _threatIntel.UpdateCompleted += ThreatIntel_UpdateCompleted;
 
                 // Initialize views
+                _homeView = new HomeView(_settingsDb, _quarantine, _threatIntel, _protection, _selfTest);
+                _homeView.QuickScanRequested += (s, e) => NavButton_Click(NavScan, new RoutedEventArgs());
+                _homeView.UpdateIntelRequested += (s, e) => NavButton_Click(NavThreatIntel, new RoutedEventArgs());
                 _scanView = new ScanView(_scanner, _whitelistManager, _backupManager);
                 _monitorView = new MonitorView(_protection);
                 _threatsView = new ThreatsView(_scanner, _whitelistManager, _backupManager, _quarantine);
@@ -137,9 +143,9 @@ namespace SkidrowKiller
                 InitializeStatusBar();
                 StartStatusBarTimer();
 
-                // Navigate to scan view by default
-                _activeNavButton = NavScan;
-                MainFrame.Navigate(_scanView);
+                // Navigate to the Home dashboard by default
+                _activeNavButton = NavHome;
+                MainFrame.Navigate(_homeView);
 
                 // Start services based on user settings
                 _ = InitializeAllServicesAsync();
@@ -202,6 +208,10 @@ namespace SkidrowKiller
             var tag = button.Tag?.ToString();
             switch (tag)
             {
+                case "Home":
+                    MainFrame.Navigate(_homeView);
+                    _homeView?.RefreshStats();
+                    break;
                 case "Scan":
                     MainFrame.Navigate(_scanView);
                     break;
