@@ -31,6 +31,7 @@ namespace SkidrowKiller
 
         private readonly ThreatIntelligenceService _threatIntel;
         private readonly SignatureUpdateService _signatureUpdate;
+        private readonly RealtimeProcessGuard _processGuard;
         private readonly SettingsDatabase _settingsDb;
         private readonly ReputationService _reputation;
 
@@ -75,6 +76,7 @@ namespace SkidrowKiller
                 _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
                 _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
+                _processGuard = new RealtimeProcessGuard(_analyzer, _whitelistManager);
                 _quarantine = new QuarantineService(_settingsDb, _reputation);
                 _licenseService = new LicenseService(_settingsDb);
                 _networkProtection = new NetworkProtectionService(_analyzer);
@@ -99,6 +101,7 @@ namespace SkidrowKiller
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
                 _protection.StatusChanged += Protection_StatusChanged;
+                _processGuard.ThreatDetected += ProcessGuard_ThreatDetected;
                 _licenseService.LicenseStatusChanged += LicenseService_StatusChanged;
                 _selfProtection.TamperAttemptDetected += SelfProtection_TamperAttemptDetected;
                 _threatIntel.UpdateCompleted += ThreatIntel_UpdateCompleted;
@@ -157,6 +160,16 @@ namespace SkidrowKiller
             {
                 ThreatCountBadge.Visibility = Visibility.Visible;
                 ThreatCountText.Text = _scanner.IsScanning ? "!" : "1";
+            });
+        }
+
+        private void ProcessGuard_ThreatDetected(object? sender, Models.ThreatInfo threat)
+        {
+            Dispatcher.Invoke(() =>
+            {
+                ThreatCountBadge.Visibility = Visibility.Visible;
+                ThreatCountText.Text = "!";
+                SetStatusBarMessage($"Real-time: {threat.Name} — {threat.Description}");
             });
         }
 
@@ -323,6 +336,7 @@ namespace SkidrowKiller
                 if (settings.StartupRealtimeProtection)
                 {
                     _protection.Start();
+                    _processGuard.Start(); // catch fast droppers via Win32_ProcessStartTrace
                     _monitorView?.RefreshUI();
                     _logger.Information("Real-time protection started");
                 }
@@ -748,6 +762,12 @@ namespace SkidrowKiller
                 _scheduledScan?.Dispose();
                 _signatureUpdate?.Dispose();
                 _threatIntel?.Dispose();
+
+                if (_processGuard != null)
+                {
+                    _processGuard.ThreatDetected -= ProcessGuard_ThreatDetected;
+                    _processGuard.Dispose();
+                }
 
                 // Dispose settings database
                 _settingsDb?.Dispose();

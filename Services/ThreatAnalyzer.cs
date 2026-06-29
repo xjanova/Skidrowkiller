@@ -177,6 +177,18 @@ namespace SkidrowKiller.Services
         /// </summary>
         public ReputationService? Reputation { get; set; }
 
+        // Known-malware import hashes (imphash) — clusters malware variants regardless of file hash.
+        // Seeded empty (imphash can collide on trivial imports); populate from the threat-intel feed.
+        private readonly HashSet<string> _badImphashes = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Load a set of known-bad PE import hashes (from the threat-intel feed) for variant detection.</summary>
+        public void SetBadImphashes(IEnumerable<string> imphashes)
+        {
+            _badImphashes.Clear();
+            foreach (var h in imphashes)
+                if (!string.IsNullOrWhiteSpace(h)) _badImphashes.Add(h.Trim().ToLowerInvariant());
+        }
+
         /// <summary>Binds tunable thresholds and toggles from appsettings.json so detection is actually configurable.</summary>
         private void ApplyConfiguredThresholds()
         {
@@ -539,6 +551,13 @@ namespace SkidrowKiller.Services
                         {
                             threat.MatchedPatterns.Add($"[PE] {peResult.SuspiciousImports.Count} suspicious imports");
                         }
+
+                        // Known-bad import hash → strong variant match (same import fingerprint as known malware).
+                        if (!string.IsNullOrEmpty(peResult.Imphash) && _badImphashes.Contains(peResult.Imphash))
+                        {
+                            threat.Score += 60;
+                            threat.MatchedPatterns.Add($"[IMPHASH] Known-malware import hash {peResult.Imphash[..Math.Min(12, peResult.Imphash.Length)]}…");
+                        }
                     }
                 }
 
@@ -898,6 +917,32 @@ namespace SkidrowKiller.Services
                     }
 
                     threat.Score = Math.Min(threat.Score, 100);
+                    threat.Severity = DetermineServerity(threat.Score);
+                    threat.Description = GenerateDescription(threat.MatchedPatterns, threat.Severity);
+                }
+            }
+            catch { }
+
+            // Memory injection / hollowing signal — committed private executable (esp. RWX) memory is
+            // where injected shellcode / a hollowed payload runs. Contributing signal, not a standalone verdict.
+            try
+            {
+                var mem = MemoryScanner.Scan(process.Id);
+                if (mem.RwxRegions > 0 || mem.PrivateExecRegions >= 3)
+                {
+                    threat ??= new ThreatInfo
+                    {
+                        Type = ThreatType.Process,
+                        Path = execPath ?? process.ProcessName,
+                        Name = process.ProcessName,
+                        ProcessId = process.Id,
+                        Score = 0,
+                        MatchedPatterns = new List<string>()
+                    };
+                    var add = mem.RwxRegions > 0 ? 25 : 12;
+                    threat.Score = Math.Min(threat.Score + add, 100);
+                    threat.MatchedPatterns.Add(
+                        $"[MEMORY] {mem.RwxRegions} RWX / {mem.PrivateExecRegions} private-exec region(s) — possible code injection");
                     threat.Severity = DetermineServerity(threat.Score);
                     threat.Description = GenerateDescription(threat.MatchedPatterns, threat.Severity);
                 }

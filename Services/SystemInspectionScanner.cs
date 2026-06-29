@@ -99,31 +99,36 @@ namespace SkidrowKiller.Services
 
                     if (!string.IsNullOrEmpty(exe) && _whitelist?.IsWhitelisted(exe) == true) continue;
 
-                    var lower = cmd.ToLowerInvariant();
-
-                    // Anti-recovery first (highest severity)
-                    var ar = AntiRecovery.FirstOrDefault(a => lower.Contains(a));
-                    if (ar != null)
-                    {
-                        results.Add(MakeProcThreat(pid, name, exe, cmd,
-                            $"Anti-recovery command in running process: {ar}", 85, ThreatCategory.Ransomware));
-                        continue;
-                    }
-
-                    foreach (var rule in LolbinRules)
-                    {
-                        if (!name.Contains(rule.Bin) && !lower.Contains(rule.Bin + " ") && !lower.Contains(rule.Bin + ".exe")) continue;
-                        if (rule.AnyOf.Any(a => lower.Contains(a)))
-                        {
-                            results.Add(MakeProcThreat(pid, name, exe, cmd,
-                                $"LOLBin abuse: {rule.Desc}", rule.Score, ThreatCategory.Suspicious));
-                            break;
-                        }
-                    }
+                    var threat = EvaluateProcessCommandLine(pid, name, exe, cmd);
+                    if (threat != null) results.Add(threat);
                 }
                 catch { }
                 finally { mo.Dispose(); }
             }
+        }
+
+        /// <summary>
+        /// Evaluate a single process command line for LOLBin abuse / anti-recovery commands.
+        /// Shared by the on-demand scan and the real-time process guard. Returns null if clean.
+        /// </summary>
+        public static ThreatInfo? EvaluateProcessCommandLine(int pid, string nameLower, string exe, string cmd)
+        {
+            if (string.IsNullOrEmpty(cmd)) return null;
+            var lower = cmd.ToLowerInvariant();
+            nameLower = (nameLower ?? "").ToLowerInvariant();
+
+            var ar = AntiRecovery.FirstOrDefault(a => lower.Contains(a));
+            if (ar != null)
+                return MakeProcThreat(pid, nameLower, exe, cmd,
+                    $"Anti-recovery command in running process: {ar}", 85, ThreatCategory.Ransomware);
+
+            foreach (var rule in LolbinRules)
+            {
+                if (!nameLower.Contains(rule.Bin) && !lower.Contains(rule.Bin + " ") && !lower.Contains(rule.Bin + ".exe")) continue;
+                if (rule.AnyOf.Any(a => lower.Contains(a)))
+                    return MakeProcThreat(pid, nameLower, exe, cmd, $"LOLBin abuse: {rule.Desc}", rule.Score, ThreatCategory.Suspicious);
+            }
+            return null;
         }
 
         // ---- 2. Scheduled tasks ----
