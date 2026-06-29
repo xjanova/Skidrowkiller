@@ -142,6 +142,31 @@ public class ThreatIntelligenceService : IDisposable
                 RequiredTier = LicenseTier.Free,
                 Parser = ParseMalwareBazaarHashes
             });
+
+            // Companion blocklists for variant detection (imphash + ssdeep), served from the official channel.
+            _feeds.RemoveAll(f => f.Id is "official_imphash" or "official_fuzzy");
+            _feeds.Add(new ThreatFeed
+            {
+                Id = "official_imphash",
+                Name = "Skidrow Imphash Blocklist",
+                Category = FeedCategory.ImportHash,
+                Url = _officialFeedUrl + ".imphash",
+                Trust = FeedTrust.Official,
+                UpdateInterval = TimeSpan.FromHours(6),
+                RequiredTier = LicenseTier.Free,
+                Parser = ParseImphashList
+            });
+            _feeds.Add(new ThreatFeed
+            {
+                Id = "official_fuzzy",
+                Name = "Skidrow Fuzzy (ssdeep) Blocklist",
+                Category = FeedCategory.FuzzyHash,
+                Url = _officialFeedUrl + ".ssdeep",
+                Trust = FeedTrust.Official,
+                UpdateInterval = TimeSpan.FromHours(6),
+                RequiredTier = LicenseTier.Free,
+                Parser = ParseFuzzyList
+            });
         }
     }
 
@@ -1154,6 +1179,77 @@ public class ThreatIntelligenceService : IDisposable
         return imported;
     }
 
+    /// <summary>Known-bad PE import hashes from the feed (for ThreatAnalyzer.SetBadImphashes).</summary>
+    public IReadOnlyList<string> GetBadImphashes()
+    {
+        var list = new List<string>();
+        try
+        {
+            var path = Path.Combine(_dataPath, "imphash_blocklist.txt");
+            if (File.Exists(path))
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    var h = line.Trim().ToLowerInvariant();
+                    if (h.Length == 32 && h.All(IsHexChar)) list.Add(h);
+                }
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "GetBadImphashes failed"); }
+        return list;
+    }
+
+    /// <summary>Known-bad ssdeep fuzzy signatures from the feed (for ThreatAnalyzer.SetBadFuzzyHashes).</summary>
+    public IReadOnlyList<(string Name, string Sig)> GetBadFuzzyHashes()
+    {
+        var list = new List<(string, string)>();
+        try
+        {
+            var path = Path.Combine(_dataPath, "fuzzy_blocklist.txt");
+            if (File.Exists(path))
+                foreach (var line in File.ReadAllLines(path))
+                {
+                    var t = line.Trim();
+                    if (t.Length == 0 || t.StartsWith("#")) continue;
+                    var bar = t.IndexOf('|');                 // "name|blocksize:s1:s2" or just "blocksize:s1:s2"
+                    if (bar > 0) list.Add((t[..bar].Trim(), t[(bar + 1)..].Trim()));
+                    else if (t.Contains(':')) list.Add(("Variant", t));
+                }
+        }
+        catch (Exception ex) { _logger?.LogDebug(ex, "GetBadFuzzyHashes failed"); }
+        return list;
+    }
+
+    private static bool IsHexChar(char c) => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+
+    private async Task<FeedUpdateResult> ParseImphashList(string path, ThreatFeed feed)
+    {
+        var result = new FeedUpdateResult();
+        var valid = new List<string>();
+        foreach (var line in await File.ReadAllLinesAsync(path))
+        {
+            var h = line.Trim().ToLowerInvariant();
+            if (h.Length == 32 && h.All(IsHexChar)) valid.Add(h);
+        }
+        await File.WriteAllLinesAsync(Path.Combine(_dataPath, "imphash_blocklist.txt"), valid);
+        result.TotalItems = valid.Count;
+        result.NewHashes = valid.Count;
+        return result;
+    }
+
+    private async Task<FeedUpdateResult> ParseFuzzyList(string path, ThreatFeed feed)
+    {
+        var result = new FeedUpdateResult();
+        var valid = new List<string>();
+        foreach (var line in await File.ReadAllLinesAsync(path))
+        {
+            var t = line.Trim();
+            if (t.Length == 0 || t.StartsWith("#")) continue;
+            if (t.Contains(':')) valid.Add(t); // an ssdeep signature is "blocksize:sig1:sig2"
+        }
+        await File.WriteAllLinesAsync(Path.Combine(_dataPath, "fuzzy_blocklist.txt"), valid);
+        result.TotalItems = valid.Count;
+        return result;
+    }
+
     /// <summary>
     /// Get all available feeds
     /// </summary>
@@ -1191,7 +1287,9 @@ public enum FeedCategory
     MaliciousIP,
     SSLFingerprint,
     YaraRules,
-    Signatures
+    Signatures,
+    ImportHash,
+    FuzzyHash
 }
 
 public enum FeedTrust
@@ -1246,6 +1344,8 @@ public class ThreatFeed
         FeedCategory.SSLFingerprint => "SSL Fingerprints",
         FeedCategory.YaraRules => "YARA Rules",
         FeedCategory.Signatures => "AV Signatures",
+        FeedCategory.ImportHash => "Import Hashes",
+        FeedCategory.FuzzyHash => "Fuzzy Hashes",
         _ => "Other"
     };
 }
