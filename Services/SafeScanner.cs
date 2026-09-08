@@ -14,6 +14,7 @@ namespace SkidrowKiller.Services
         private readonly ThreatAnalyzer _analyzer;
         private readonly WhitelistManager _whitelist;
         private readonly BackupManager _backup;
+        private readonly ThreatEradicator _eradicator;
         private readonly ILogger _logger;
         private CancellationTokenSource? _cts;
         private int _scanGate; // 0 = idle, 1 = a scan is running (re-entrancy guard)
@@ -69,13 +70,17 @@ namespace SkidrowKiller.Services
         private const uint PROCESS_QUERY_INFORMATION = 0x0400;
         private const uint PROCESS_VM_READ = 0x0010;
 
-        public SafeScanner(ThreatAnalyzer analyzer, WhitelistManager whitelist, BackupManager backup)
+        public SafeScanner(ThreatAnalyzer analyzer, WhitelistManager whitelist, BackupManager backup,
+            QuarantineService? quarantine = null)
         {
             _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
             _whitelist = whitelist ?? throw new ArgumentNullException(nameof(whitelist));
             _backup = backup ?? throw new ArgumentNullException(nameof(backup));
             _logger = LoggingService.ForContext<SafeScanner>();
             _backup.LogAdded += (s, msg) => RaiseLog(msg);
+
+            _eradicator = new ThreatEradicator(_backup, quarantine, _analyzer, _whitelist);
+            _eradicator.LogAdded += (s, msg) => RaiseLog(msg);
 
             // Scanning:ScanTimeoutMinutes used to be read by nothing, so a wedged scan ran forever.
             try { ScanTimeoutMinutes = AppConfiguration.Settings.Scanning.ScanTimeoutMinutes; }
@@ -896,27 +901,52 @@ namespace SkidrowKiller.Services
             return result.Count > 0 ? result : null;
         }
 
+        /// <summary>
+        /// Remove a threat. Returns true only when the threat is actually gone - not when a delete
+        /// silently failed (the old behaviour logged "securely wiped" for a still-present file) and
+        /// not when removal had to be deferred to reboot. <see cref="ThreatInfo.RemovalNote"/>
+        /// carries the detail either way.
+        /// </summary>
         public async Task<bool> RemoveThreatAsync(ThreatInfo threat, bool backup = true)
+        {
+            switch (threat.Type)
+            {
+                case ThreatType.File:
+                case ThreatType.Process:
+                case ThreatType.DllInjection:
+                case ThreatType.NetworkConnection:
+                    // Kill every process running the image, strip the persistence that would bring it
+                    // back, then wipe (or defer to reboot) - and say which of those actually happened.
+                    var outcome = await EradicateAsync(threat, backup, EradicationMode.Delete);
+                    return outcome.Succeeded;
+
+                case ThreatType.Directory:
+                    return RemoveDirectory(threat, backup);
+
+                case ThreatType.Registry:
+                    return DeleteRegistryEntry(threat.Path);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Full-footprint removal with a detailed outcome. Used directly by the real-time responder and
+        /// by the scan screen's quarantine policy so a running sample is killed before its file moves.
+        /// </summary>
+        public Task<EradicationResult> EradicateAsync(ThreatInfo threat, bool backup, EradicationMode mode,
+            CancellationToken cancellationToken = default)
+            => _eradicator.EradicateAsync(threat, backup, mode, cancellationToken);
+
+        private bool RemoveDirectory(ThreatInfo threat, bool backup)
         {
             try
             {
-                // Backup first if requested
+                if (!Directory.Exists(threat.Path)) return false;
+
                 if (backup)
                 {
-                    string? backupId = null;
-                    switch (threat.Type)
-                    {
-                        case ThreatType.File:
-                            backupId = _backup.BackupFile(threat.Path);
-                            break;
-                        case ThreatType.Directory:
-                            backupId = _backup.BackupDirectory(threat.Path);
-                            break;
-                        case ThreatType.Registry:
-                            // Registry backup handled separately
-                            break;
-                    }
-
+                    var backupId = _backup.BackupDirectory(threat.Path);
                     if (backupId != null)
                     {
                         threat.IsBackedUp = true;
@@ -924,51 +954,18 @@ namespace SkidrowKiller.Services
                     }
                 }
 
-                // Remove threat
-                switch (threat.Type)
-                {
-                    case ThreatType.File:
-                        if (File.Exists(threat.Path))
-                        {
-                            // Overwrite the bytes before deleting so the payload can't be carved back from disk
-                            // (a backup copy was already made above if requested).
-                            SecureDelete(threat.Path);
-                            RaiseLog($"✅ [REMOVED] File (securely wiped): {threat.Path}");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Directory:
-                        if (Directory.Exists(threat.Path))
-                        {
-                            Directory.Delete(threat.Path, true);
-                            RaiseLog($"✅ [REMOVED] Directory: {threat.Path}");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Process:
-                        if (threat.ProcessId.HasValue)
-                        {
-                            var proc = Process.GetProcessById(threat.ProcessId.Value);
-                            proc.Kill(true);
-                            proc.WaitForExit(5000);
-                            RaiseLog($"✅ [KILLED] Process: {threat.Name} (PID: {threat.ProcessId})");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Registry:
-                        // Parse and delete registry entry
-                        return DeleteRegistryEntry(threat.Path);
-                }
+                Directory.Delete(threat.Path, true);
+                var gone = !Directory.Exists(threat.Path);
+                threat.RemovalNote = gone ? "directory removed" : "directory could not be removed";
+                RaiseLog(gone ? $"✅ [REMOVED] Directory: {threat.Path}" : $"❌ [FAILED] Directory still present: {threat.Path}");
+                return gone;
             }
             catch (Exception ex)
             {
+                threat.RemovalNote = ex.Message;
                 RaiseLog($"❌ [ERROR] Failed to remove {threat.Path}: {ex.Message}");
+                return false;
             }
-
-            return false;
         }
 
         private bool DeleteRegistryEntry(string fullPath)
@@ -1036,36 +1033,6 @@ namespace SkidrowKiller.Services
         /// malware cannot be recovered by file-carving. Overwrites up to 100 MB (enough to destroy the PE
         /// headers/body of any real sample) then deletes. Falls back to a plain delete if the file is locked.
         /// </summary>
-        private void SecureDelete(string path)
-        {
-            try
-            {
-                File.SetAttributes(path, FileAttributes.Normal);
-                var length = new FileInfo(path).Length;
-                if (length > 0)
-                {
-                    var toWipe = Math.Min(length, 100L * 1024 * 1024);
-                    using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
-                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None);
-                    var buffer = new byte[64 * 1024];
-                    long written = 0;
-                    while (written < toWipe)
-                    {
-                        rng.GetBytes(buffer);
-                        var n = (int)Math.Min(buffer.Length, toWipe - written);
-                        fs.Write(buffer, 0, n);
-                        written += n;
-                    }
-                    fs.Flush(true);
-                }
-                File.Delete(path);
-            }
-            catch
-            {
-                try { File.Delete(path); } catch { /* locked/in-use — leave to quarantine/next boot */ }
-            }
-        }
-
         private void RaiseLog(string message)
         {
             LogAdded?.Invoke(this, message);

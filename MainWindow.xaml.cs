@@ -92,10 +92,10 @@ namespace SkidrowKiller
                 var vtKey = _settingsDb.GetSetting<string>("VirusTotalApiKey", string.Empty);
                 if (!string.IsNullOrWhiteSpace(vtKey))
                     _analyzer.ConfigureVirusTotal(vtKey);
-                _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
+                _quarantine = new QuarantineService(_settingsDb, _reputation);
+                _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager, _quarantine);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
                 _processGuard = new RealtimeProcessGuard(_analyzer, _whitelistManager);
-                _quarantine = new QuarantineService(_settingsDb, _reputation);
                 _licenseService = new LicenseService(_settingsDb);
                 _networkProtection = new NetworkProtectionService(_analyzer);
                 _selfProtection = new SelfProtectionService();
@@ -123,6 +123,7 @@ namespace SkidrowKiller
                 // Subscribe to events
                 _scanner.ThreatFound += Scanner_ThreatFound;
                 _protection.StatusChanged += Protection_StatusChanged;
+                _protection.AlertRaised += Protection_AlertRaised;
                 _processGuard.ThreatDetected += ProcessGuard_ThreatDetected;
                 _licenseService.LicenseStatusChanged += LicenseService_StatusChanged;
                 _selfProtection.TamperAttemptDetected += SelfProtection_TamperAttemptDetected;
@@ -196,6 +197,77 @@ namespace SkidrowKiller
                 if (_showNotifications && !_gamingMode.NotificationsSuppressed)
                     SetStatusBarMessage($"Real-time: {threat.Name} — {threat.Description}");
             });
+
+            _ = AutoRespondAsync(threat, "process guard");
+        }
+
+        private void Protection_AlertRaised(object? sender, ProtectionAlert alert)
+        {
+            if (alert.Threat != null)
+                _ = AutoRespondAsync(alert.Threat, "real-time protection");
+        }
+
+        // Threat-action policy from Settings: 0 ask, 1 quarantine automatically, 2 delete automatically, 3 log only.
+        private int _threatActionPolicy;
+
+        // Paths we have already responded to recently, so a respawning sample cannot make us loop.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTime> _recentResponses = new();
+
+        /// <summary>
+        /// Act on a real-time detection instead of only announcing it. Until now a dropper caught at
+        /// process start, or a payload landing in Downloads, produced a status-bar line and nothing
+        /// else - the process kept running. Under an automatic policy, High/Critical threats are now
+        /// eradicated (process tree killed, persistence stripped, file quarantined or wiped).
+        /// </summary>
+        private async Task AutoRespondAsync(Models.ThreatInfo threat, string source)
+        {
+            try
+            {
+                // Policy matrix for UNATTENDED detections:
+                //   3 log only            -> never act
+                //   2 delete automatically-> High and above, wipe
+                //   1 quarantine auto     -> High and above, quarantine
+                //   0 ask me every time   -> Critical only, quarantine (reversible)
+                // "Ask" is a scan-time preference; there is nobody to ask when a dropper starts at 3 am,
+                // and letting a hash-confirmed Critical sample keep running is not what real-time
+                // protection means. Quarantine keeps that decision reversible from the Quarantine screen.
+                EradicationMode mode;
+                switch (_threatActionPolicy)
+                {
+                    case 2: mode = EradicationMode.Delete; break;
+                    case 1: mode = EradicationMode.Quarantine; break;
+                    case 0:
+                        if (threat.Severity < Models.ThreatSeverity.Critical) return;
+                        mode = EradicationMode.Quarantine;
+                        break;
+                    default: return;
+                }
+                if (threat.Severity < Models.ThreatSeverity.High) return;
+
+                var now = DateTime.UtcNow;
+                foreach (var stale in _recentResponses.Where(kv => now - kv.Value > TimeSpan.FromMinutes(5)).Select(kv => kv.Key).ToList())
+                    _recentResponses.TryRemove(stale, out _);
+
+                var key = (threat.Path + "|" + (threat.ProcessId?.ToString() ?? "")).ToLowerInvariant();
+                if (_recentResponses.TryGetValue(key, out var last) && (now - last) < TimeSpan.FromSeconds(60)) return;
+                _recentResponses[key] = now;
+
+                var outcome = await _scanner.EradicateAsync(threat, backup: true, mode);
+
+                if (outcome.Succeeded) _protection.ReportBlocked();
+
+                _logger.Warning("Real-time response ({Source}) for {Path}: {Summary}", source, threat.Path, outcome.Summary);
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    if (_showNotifications && !_gamingMode.NotificationsSuppressed)
+                        SetStatusBarMessage($"{(outcome.Succeeded ? "Blocked" : "Response incomplete")}: {threat.Name} — {outcome.Summary}");
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Automatic threat response failed for {Path}", threat.Path);
+            }
         }
 
         private void ShowThreatBadge(int count)
@@ -435,6 +507,7 @@ namespace SkidrowKiller
         private void ApplyUserSettings(Views.UserSettings settings, bool isStartup)
         {
             _showNotifications = settings.ShowNotifications;
+            _threatActionPolicy = settings.ThreatAction;
 
             // --- Logging ---
             try
@@ -934,6 +1007,7 @@ namespace SkidrowKiller
                 if (_protection != null)
                 {
                     _protection.StatusChanged -= Protection_StatusChanged;
+                    _protection.AlertRaised -= Protection_AlertRaised;
                     _protection.Dispose();
                 }
 

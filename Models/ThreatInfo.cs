@@ -101,6 +101,13 @@ namespace SkidrowKiller.Models
         public string Recommendation { get; set; } = string.Empty;  // What user should do
         public bool CanIgnore { get; set; } = false; // Can user safely ignore this?
 
+        /// <summary>
+        /// What removal actually achieved ("2 processes killed, 1 autorun entry removed, file locked -
+        /// removal scheduled for next reboot"). Set by ThreatEradicator; shown by the views so a
+        /// partial or deferred outcome is never reported as a plain failure.
+        /// </summary>
+        public string RemovalNote { get; set; } = string.Empty;
+
         // For processes
         public int? ProcessId { get; set; }
         public List<string>? LoadedDlls { get; set; }

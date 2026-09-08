@@ -65,6 +65,7 @@ namespace SkidrowKiller.Services
         private int _networkConnections;
         private int _registryKeysChecked;
         private int _blockedThreats;
+        private int _threatsDetected;
 
         public event EventHandler<ProtectionAlert>? AlertRaised;
         public event EventHandler<ProtectionStatus>? StatusChanged;
@@ -106,7 +107,18 @@ namespace SkidrowKiller.Services
         public int FilesWatched => _filesWatched;
         public int NetworkConnections => _networkConnections;
         public int RegistryKeysChecked => _registryKeysChecked;
+
+        /// <summary>Threats this service has flagged. Flagging is not blocking.</summary>
+        public int ThreatsDetected => _threatsDetected;
+
+        /// <summary>
+        /// Threats that were actually neutralised in response to an alert. This used to be bumped on
+        /// every detection while nothing in this class ever killed, quarantined or deleted anything -
+        /// it is now only incremented by <see cref="ReportBlocked"/> from whoever really acted.
+        /// </summary>
         public int BlockedThreats => _blockedThreats;
+
+        public void ReportBlocked() => Interlocked.Increment(ref _blockedThreats);
 
         // Base list plus whatever Protection:SuspiciousPorts adds in appsettings.json (that key used to be dead).
         private readonly HashSet<int> _suspiciousPorts = BuildSuspiciousPorts();
@@ -157,6 +169,7 @@ namespace SkidrowKiller.Services
             _networkConnections = 0;
             _registryKeysChecked = 0;
             _blockedThreats = 0;
+            _threatsDetected = 0;
             _alertedConnections.Clear();
 
             InitializeKnownProcesses();
@@ -290,7 +303,7 @@ namespace SkidrowKiller.Services
                 if (threat != null && threat.Severity >= ThreatSeverity.Medium)
                 {
                     _alertCount++;
-                    _blockedThreats++;
+                    _threatsDetected++;
 
                     var alert = new ProtectionAlert
                     {
@@ -457,7 +470,7 @@ namespace SkidrowKiller.Services
                 if (threat != null)
                 {
                     _alertCount++;
-                    _blockedThreats++;
+                    _threatsDetected++;
 
                     var alert = new ProtectionAlert
                     {

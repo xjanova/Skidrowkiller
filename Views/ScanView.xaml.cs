@@ -678,21 +678,29 @@ namespace SkidrowKiller.Views
 
             if (_quarantineOnly && quarantinable && _quarantine != null)
             {
-                var result = threat.Type == ThreatType.Directory
-                    ? _quarantine.QuarantineDirectory(threat.Path, threat)
-                    : _quarantine.QuarantineFile(threat.Path, threat);
-
-                if (result.Success)
+                if (threat.Type == ThreatType.Directory)
                 {
-                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] 🔒 Quarantined: {threat.Path}\n");
-                    return true;
+                    var result = _quarantine.QuarantineDirectory(threat.Path, threat);
+                    LogTextBox.AppendText(result.Success
+                        ? $"[{DateTime.Now:HH:mm:ss}] 🔒 Quarantined: {threat.Path}\n"
+                        : $"[{DateTime.Now:HH:mm:ss}] ⚠️ Quarantine failed ({result.Message}): {threat.Path}\n");
+                    return result.Success;
                 }
 
-                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⚠️ Quarantine failed ({result.Message}): {threat.Path}\n");
-                return false;
+                // Through the eradicator so a sample that is currently RUNNING is killed (and its
+                // autorun stripped) before its file is moved - a plain QuarantineFile on a live
+                // executable just failed with a sharing violation.
+                var outcome = await _scanner.EradicateAsync(threat, backup, EradicationMode.Quarantine);
+                LogTextBox.AppendText(outcome.Succeeded
+                    ? $"[{DateTime.Now:HH:mm:ss}] 🔒 Quarantined: {threat.Path} ({outcome.Summary})\n"
+                    : $"[{DateTime.Now:HH:mm:ss}] ⚠️ Quarantine incomplete: {threat.Path} ({outcome.Summary})\n");
+                return outcome.Succeeded;
             }
 
-            return await _scanner.RemoveThreatAsync(threat, backup);
+            var removed = await _scanner.RemoveThreatAsync(threat, backup);
+            if (!removed && !string.IsNullOrEmpty(threat.RemovalNote))
+                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⚠️ {threat.Path}: {threat.RemovalNote}\n");
+            return removed;
         }
 
         private async void ProcessThreats(List<ThreatInfo> threats)

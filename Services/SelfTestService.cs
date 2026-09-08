@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using Microsoft.Win32;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
@@ -43,7 +45,7 @@ namespace SkidrowKiller.Services
             _logger = LoggingService.ForContext<SelfTestService>();
 
             if (whitelist != null && backup != null)
-                _scanner = new SafeScanner(analyzer, whitelist, backup);
+                _scanner = new SafeScanner(analyzer, whitelist, backup, quarantine);
         }
 
         public async Task<List<SelfTestResult>> RunAsync()
@@ -58,7 +60,9 @@ namespace SkidrowKiller.Services
 
                 await RunDetectionChecksAsync(results, dir);
                 await RunRemovalChecksAsync(results, dir);
+                await RunEradicationChecksAsync(results, dir);
                 await RunQuarantineChecksAsync(results, dir);
+                RunLearningChecksAsync(results, dir);
                 RunLibraryChecks(results);
             }
             catch (Exception ex)
@@ -228,6 +232,178 @@ namespace SkidrowKiller.Services
                     _backup.DeleteBackup(threat.BackupPath);
                     return restored;
                 });
+            }
+        }
+
+        #endregion
+
+        #region Eradication (kill + persistence + wipe)
+
+        private const string SelfTestRunValue = "SkidrowKillerSelfTest";
+        private const string RunKeyPath = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+
+        /// <summary>A harmless, signed Microsoft executable we can copy and run as a stand-in sample.</summary>
+        private static string StandInExecutable => Path.Combine(Environment.SystemDirectory, "ping.exe");
+
+        private async Task RunEradicationChecksAsync(List<SelfTestResult> results, string dir)
+        {
+            if (_scanner == null) return;
+
+            // K1: a RUNNING sample. Killing the PID alone used to leave the image on disk and the
+            //     old code reported "securely wiped" for a file that was still there.
+            await SafeCheck(results, "Kill a running sample and wipe its image", async () =>
+            {
+                var image = Path.Combine(dir, "live_sample.exe");
+                File.Copy(StandInExecutable, image);
+
+                using var proc = Process.Start(new ProcessStartInfo(image, "-n 60 127.0.0.1")
+                {
+                    UseShellExecute = false, CreateNoWindow = true
+                });
+                if (proc == null) throw new InvalidOperationException("could not start the stand-in process");
+
+                try
+                {
+                    var threat = new ThreatInfo
+                    {
+                        Type = ThreatType.Process, Path = image, Name = "live_sample.exe",
+                        ProcessId = proc.Id, Score = 95, Severity = ThreatSeverity.Critical
+                    };
+
+                    var outcome = await _scanner.EradicateAsync(threat, backup: false, EradicationMode.Delete);
+                    proc.WaitForExit(3000);
+
+                    return outcome.ProcessesKilled >= 1 && proc.HasExited
+                           && (!File.Exists(image) || outcome.DeferredToReboot);
+                }
+                finally
+                {
+                    try { if (!proc.HasExited) proc.Kill(true); } catch { }
+                }
+            });
+
+            // K2: persistence. A file removal that leaves the Run key behind is a removal that fails
+            //     at the next logon.
+            await SafeCheck(results, "Autorun entry pointing at the sample is removed", async () =>
+            {
+                var image = Path.Combine(dir, "persist_sample.exe");
+                File.Copy(StandInExecutable, image);
+
+                using (var run = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true))
+                    run?.SetValue(SelfTestRunValue, $"\"{image}\" -n 1 127.0.0.1");
+
+                try
+                {
+                    var threat = new ThreatInfo
+                    {
+                        Type = ThreatType.File, Path = image, Name = "persist_sample.exe",
+                        Score = 95, Severity = ThreatSeverity.Critical
+                    };
+
+                    var outcome = await _scanner.EradicateAsync(threat, backup: false, EradicationMode.Delete);
+
+                    bool stillThere;
+                    using (var check = Registry.CurrentUser.OpenSubKey(RunKeyPath))
+                        stillThere = check?.GetValue(SelfTestRunValue) != null;
+
+                    return outcome.RunEntriesRemoved >= 1 && !stillThere && !File.Exists(image);
+                }
+                finally
+                {
+                    try
+                    {
+                        using var run = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
+                        run?.DeleteValue(SelfTestRunValue, throwOnMissingValue: false);
+                    }
+                    catch { }
+                }
+            });
+
+            // K3: honesty. Removal must NOT claim success for a file it could not remove.
+            await SafeCheck(results, "Removal reports failure honestly", async () =>
+            {
+                var locked = Path.Combine(dir, "locked_sample.bin");
+                File.WriteAllBytes(locked, new byte[4096]);
+
+                // Hold the file open with no sharing so both the wipe and the delete must fail.
+                using var hold = new FileStream(locked, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+                var threat = new ThreatInfo { Type = ThreatType.File, Path = locked, Name = "locked_sample.bin", Score = 95 };
+                var removed = await _scanner.RemoveThreatAsync(threat, backup: false);
+
+                // Either it was honestly reported as not removed, or it was honestly deferred to
+                // reboot - what it must never do is return true while the file is still here.
+                return !removed && File.Exists(locked) && !string.IsNullOrEmpty(threat.RemovalNote);
+            });
+        }
+
+        #endregion
+
+        #region Learning
+
+        private void RunLearningChecksAsync(List<SelfTestResult> results, string dir)
+        {
+            var rep = _analyzer.Reputation;
+            if (rep == null)
+            {
+                results.Add(new SelfTestResult
+                {
+                    Name = "Learning memory is attached",
+                    Passed = false,
+                    Detail = "ReputationService is not wired into the analyzer"
+                });
+                return;
+            }
+
+            // L1: three confirmed removals of the same bytes must make the engine score them higher
+            //     next time (a single removal deliberately does not - MinVotesBeforeTrust guards
+            //     against one click poisoning the memory).
+            try
+            {
+                var f = Path.Combine(dir, "learn_bad.bin");
+                File.WriteAllBytes(f, System.Security.Cryptography.RandomNumberGenerator.GetBytes(512));
+                var hash = MalwareSignatureDatabase.ComputeSHA256(File.ReadAllBytes(f));
+                var patterns = new List<string> { "[SIG] selftest-pattern" };
+
+                var before = rep.AdjustScore(hash, patterns, 30, 80);
+                for (var i = 0; i < 3; i++) rep.RecordConfirmedRemoval(hash, f, patterns, 30);
+                var after = rep.AdjustScore(hash, patterns, 30, 80);
+
+                results.Add(new SelfTestResult
+                {
+                    Name = "Learns from confirmed removals",
+                    Passed = !before.KnownBad && after.KnownBad && after.AdjustedScore > before.AdjustedScore,
+                    Detail = $"score {before.AdjustedScore} → {after.AdjustedScore} after 3 confirmed removals"
+                });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new SelfTestResult { Name = "Learns from confirmed removals", Passed = false, Detail = ex.Message });
+            }
+
+            // L2: repeated "this is safe" feedback must silence the detection for those bytes.
+            try
+            {
+                var f = Path.Combine(dir, "learn_good.bin");
+                File.WriteAllBytes(f, System.Security.Cryptography.RandomNumberGenerator.GetBytes(512));
+                var hash = MalwareSignatureDatabase.ComputeSHA256(File.ReadAllBytes(f));
+                var patterns = new List<string> { "[SIG] selftest-pattern" };
+
+                var before = rep.AdjustScore(hash, patterns, 30, 80);
+                rep.RecordWhitelistAdd(hash, f, patterns, 30);
+                rep.RecordWhitelistAdd(hash, f, patterns, 30);
+                var after = rep.AdjustScore(hash, patterns, 30, 80);
+
+                results.Add(new SelfTestResult
+                {
+                    Name = "Learns from 'this is safe' feedback",
+                    Passed = !before.TrustedSafe && after.TrustedSafe,
+                    Detail = after.TrustedSafe ? "hash is now locally trusted" : "hash was not trusted after feedback"
+                });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new SelfTestResult { Name = "Learns from 'this is safe' feedback", Passed = false, Detail = ex.Message });
             }
         }
 
