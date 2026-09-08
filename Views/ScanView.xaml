@@ -52,6 +52,15 @@
                         Margin="8,0,0,0"
                         IsEnabled="False"
                         Click="StopButton_Click"/>
+
+                <Button x:Name="ReportButton"
+                        Style="{StaticResource SecondaryButtonStyle}"
+                        Content="📄 Report"
+                        Width="110"
+                        Margin="8,0,0,0"
+                        IsEnabled="False"
+                        ToolTip="Save an HTML report of the last scan"
+                        Click="ReportButton_Click"/>
             </StackPanel>
         </Grid>
 

@@ -74,62 +74,35 @@
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
                     <TextBlock Text="Detection Engine" FontSize="16" FontWeight="SemiBold"
                                Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
-                    <Border Background="{StaticResource GreenPrimaryBrush}" CornerRadius="10"
+                    <Border x:Name="LayerCountBadge" Background="{StaticResource GreenPrimaryBrush}" CornerRadius="10"
                             Padding="8,2" Margin="10,0,0,0">
-                        <TextBlock Text="8 ACTIVE LAYERS" FontSize="10" FontWeight="Bold" Foreground="White"/>
+                        <TextBlock x:Name="TxtActiveLayers" Text="ACTIVE LAYERS" FontSize="10" FontWeight="Bold" Foreground="White"/>
                     </Border>
                 </StackPanel>
-                <WrapPanel>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Authenticode Signature" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Heuristics" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Entropy / Packing" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Behavioral" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="YARA Rules" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Hash Reputation" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="AI Learning" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                    <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12" Padding="10,6" Margin="0,0,8,8">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="8" Height="8" Fill="{StaticResource SuccessBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBlock Text="Cloud (VirusTotal)" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        </StackPanel>
-                    </Border>
-                </WrapPanel>
-                <TextBlock Text="Every file passes all layers, then is cross-checked against the live threat database and your local AI reputation memory — verdicts are explainable, not guessed."
+
+                <!-- Each chip reflects the engine's real state; a layer without its prerequisites
+                     (no VirusTotal key, no rules loaded) shows grey, not green. -->
+                <ItemsControl x:Name="DetectionLayersList">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource BgTertiaryBrush}" CornerRadius="12"
+                                    Padding="10,6" Margin="0,0,8,8" ToolTip="{Binding Detail}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse Width="8" Height="8" Fill="{Binding StatusColor}"
+                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding Name}" FontSize="12"
+                                               Foreground="{StaticResource TextPrimaryBrush}"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="Every file passes each ACTIVE layer above, then is cross-checked against the live threat database and your local reputation memory — verdicts are explainable, not guessed. Grey chips are layers that are switched off or missing a prerequisite."
                            FontSize="12" Foreground="{StaticResource TextTertiaryBrush}" Margin="0,4,0,0" TextWrapping="Wrap"/>
             </StackPanel>
         </Border>
@@ -227,6 +200,15 @@
                 <TextBlock Text="Official Feed URL (optional, HTTPS, with .sha256 sidecar)" FontSize="12"
                            Foreground="{StaticResource TextSecondaryBrush}" Margin="0,12,0,4"/>
                 <TextBox x:Name="TxtOfficialUrl" Height="34" Padding="8,6"
+                         Background="{StaticResource BgTertiaryBrush}"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         CaretBrush="{StaticResource TextPrimaryBrush}"
+                         BorderBrush="{StaticResource BgTertiaryBrush}" BorderThickness="1"
+                         VerticalContentAlignment="Center"/>
+
+                <TextBlock Text="VirusTotal API key (optional, enables the cloud lookup layer)" FontSize="12"
+                           Foreground="{StaticResource TextSecondaryBrush}" Margin="0,12,0,4"/>
+                <TextBox x:Name="TxtVirusTotalKey" Height="34" Padding="8,6"
                          Background="{StaticResource BgTertiaryBrush}"
                          Foreground="{StaticResource TextPrimaryBrush}"
                          CaretBrush="{StaticResource TextPrimaryBrush}"

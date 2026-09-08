@@ -30,6 +30,17 @@ namespace SkidrowKiller.Services
         public bool IsPaused => _isPaused;
         public bool IsScanning => _cts != null && !_cts.IsCancellationRequested;
 
+        /// <summary>
+        /// Include network drives in a full-drive scan (Settings -> Scanning -> Scan network drives).
+        /// Off by default because network scans are slow and often not the user's machine.
+        /// </summary>
+        public bool ScanNetworkDrives { get; set; }
+
+        /// <summary>
+        /// Hard stop for a single scan, from Scanning:ScanTimeoutMinutes. 0 disables the timeout.
+        /// </summary>
+        public int ScanTimeoutMinutes { get; set; }
+
         // Pre-scan counting
         private long _totalFilesToScan;
         private long _totalRegistryToScan;
@@ -65,6 +76,10 @@ namespace SkidrowKiller.Services
             _backup = backup ?? throw new ArgumentNullException(nameof(backup));
             _logger = LoggingService.ForContext<SafeScanner>();
             _backup.LogAdded += (s, msg) => RaiseLog(msg);
+
+            // Scanning:ScanTimeoutMinutes used to be read by nothing, so a wedged scan ran forever.
+            try { ScanTimeoutMinutes = AppConfiguration.Settings.Scanning.ScanTimeoutMinutes; }
+            catch { ScanTimeoutMinutes = 60; }
         }
 
         public async Task<ScanResult> ScanAsync(bool scanFiles, bool scanRegistry, bool scanProcesses,
@@ -85,6 +100,16 @@ namespace SkidrowKiller.Services
             // Replace and dispose any previous token source (defensive; the gate already serializes this).
             var previousCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
             previousCts?.Dispose();
+
+            // Scanning:ScanTimeoutMinutes is a real stop now: a scan wedged on an unresponsive
+            // network path or a pathological directory tree used to run until the app was killed.
+            DateTime? deadline = null;
+            if (ScanTimeoutMinutes > 0)
+            {
+                deadline = DateTime.UtcNow.AddMinutes(ScanTimeoutMinutes);
+                _cts!.CancelAfter(TimeSpan.FromMinutes(ScanTimeoutMinutes));
+            }
+
             var token = _cts!.Token;
             var startTime = DateTime.Now;
 
@@ -190,7 +215,12 @@ namespace SkidrowKiller.Services
             }
             catch (OperationCanceledException)
             {
-                RaiseLog("\n⚠️ [CANCELLED] Scan stopped by user");
+                // Distinguish "the user pressed Stop" from "the configured timeout expired" - saying
+                // "stopped by user" for a timeout hides a real problem (e.g. an unresponsive path).
+                if (deadline.HasValue && DateTime.UtcNow >= deadline.Value)
+                    RaiseLog($"\n⏱️ [TIMEOUT] Scan stopped after the configured {ScanTimeoutMinutes} minute limit");
+                else
+                    RaiseLog("\n⚠️ [CANCELLED] Scan stopped by user");
             }
             catch (Exception ex)
             {
@@ -295,11 +325,40 @@ namespace SkidrowKiller.Services
                 return _selectedDrives;
             }
 
-            // Default: all fixed and removable drives
+            // Honour Scanning:ExcludedDriveTypes (previously dead config) and the
+            // "Scan network drives" setting instead of hardcoding Fixed|Removable.
+            var excluded = GetExcludedDriveTypes();
+
             return DriveInfo.GetDrives()
-                .Where(d => d.IsReady && (d.DriveType == DriveType.Fixed || d.DriveType == DriveType.Removable))
+                .Where(d => d.IsReady)
+                .Where(d => !excluded.Contains(d.DriveType))
+                .Where(d => ScanNetworkDrives || d.DriveType != DriveType.Network)
                 .Select(d => d.RootDirectory.FullName)
                 .ToList();
+        }
+
+        private HashSet<DriveType> GetExcludedDriveTypes()
+        {
+            var excluded = new HashSet<DriveType>();
+
+            try
+            {
+                foreach (var name in AppConfiguration.Settings.Scanning.ExcludedDriveTypes)
+                {
+                    if (Enum.TryParse<DriveType>(name, ignoreCase: true, out var type))
+                        excluded.Add(type);
+                }
+            }
+            catch
+            {
+                excluded.Add(DriveType.Network);
+                excluded.Add(DriveType.CDRom);
+            }
+
+            // The explicit setting wins over the config file for network drives.
+            if (ScanNetworkDrives) excluded.Remove(DriveType.Network);
+
+            return excluded;
         }
 
         private static List<string> GetQuickScanPaths(string drive)
@@ -491,11 +550,10 @@ namespace SkidrowKiller.Services
                     result.TotalScanned++;
                     _sectionScanned++;
 
-                    // Report progress every 100 files for smoother UI
-                    if (result.TotalScanned % 100 == 0)
-                    {
-                        RaiseProgress(file, result);
-                    }
+                    // Report progress on the configured cadence. It used to fire every 100 FILES,
+                    // which is either a flood (small files) or a stall (large ones), and it ignored
+                    // Scanning:ProgressUpdateIntervalMs entirely.
+                    RaiseProgressThrottled(file, result);
 
                     var threat = _analyzer.AnalyzePath(file);
                     if (threat != null)
@@ -517,6 +575,33 @@ namespace SkidrowKiller.Services
             }
             catch (UnauthorizedAccessException) { }
             catch (Exception) { }
+        }
+
+        private static readonly TimeSpan _progressInterval = ResolveProgressInterval();
+        private long _lastProgressTicks;
+
+        private static TimeSpan ResolveProgressInterval()
+        {
+            try
+            {
+                var ms = AppConfiguration.Settings.Scanning.ProgressUpdateIntervalMs;
+                if (ms > 0) return TimeSpan.FromMilliseconds(Math.Clamp(ms, 16, 5000));
+            }
+            catch { /* configuration unavailable */ }
+
+            return TimeSpan.FromMilliseconds(100);
+        }
+
+        /// <summary>Emit a progress update at most once per configured interval.</summary>
+        private void RaiseProgressThrottled(string currentItem, ScanResult result)
+        {
+            var now = DateTime.UtcNow.Ticks;
+            var last = Interlocked.Read(ref _lastProgressTicks);
+
+            if (now - last < _progressInterval.Ticks) return;
+            if (Interlocked.CompareExchange(ref _lastProgressTicks, now, last) != last) return;
+
+            RaiseProgress(currentItem, result);
         }
 
         private void RaiseProgress(string currentItem, ScanResult result)

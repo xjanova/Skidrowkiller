@@ -25,6 +25,15 @@ namespace SkidrowKiller.Views
         // Event to request navigation to ThreatIntelligenceView
         public event EventHandler? NavigateToThreatIntelRequested;
 
+        /// <summary>
+        /// Raised after the user's settings have been persisted. MainWindow listens and pushes the
+        /// values into the live services - without this, saving only wrote rows nobody ever read.
+        /// </summary>
+        public event EventHandler<UserSettings>? SettingsApplied;
+
+        /// <summary>The settings currently shown (and last saved).</summary>
+        public UserSettings CurrentSettings => _settings;
+
         public SettingsView(SettingsDatabase settingsDb)
         {
             InitializeComponent();
@@ -66,68 +75,7 @@ namespace SkidrowKiller.Views
         {
             try
             {
-                // Load settings from SQLite database
-                return new UserSettings
-                {
-                    // General
-                    StartWithWindows = _settingsDb.GetSetting<bool>("StartWithWindows", false),
-                    StartMinimized = _settingsDb.GetSetting<bool>("StartMinimized", false),
-                    CheckForUpdates = _settingsDb.GetSetting<bool>("CheckForUpdates", true),
-
-                    // Real-time Protection
-                    RealtimeProtection = _settingsDb.GetSetting<bool>("RealtimeProtection", true),
-                    MonitorProcesses = _settingsDb.GetSetting<bool>("MonitorProcesses", true),
-                    MonitorNetwork = _settingsDb.GetSetting<bool>("MonitorNetwork", true),
-                    ShowNotifications = _settingsDb.GetSetting<bool>("ShowNotifications", true),
-
-                    // Scanning
-                    ScanFiles = _settingsDb.GetSetting<bool>("ScanFiles", true),
-                    ScanRegistry = _settingsDb.GetSetting<bool>("ScanRegistry", true),
-                    ScanProcesses = _settingsDb.GetSetting<bool>("ScanProcesses", true),
-                    ScanNetworkDrives = _settingsDb.GetSetting<bool>("ScanNetworkDrives", false),
-
-                    // Threat Actions
-                    ThreatAction = _settingsDb.GetSetting<int>("ThreatAction", 0),
-                    BackupBeforeDelete = _settingsDb.GetSetting<bool>("BackupBeforeDelete", true),
-                    QuarantineOnly = _settingsDb.GetSetting<bool>("QuarantineOnly", false),
-                    SensitivityLevel = _settingsDb.GetSetting<int>("SensitivityLevel", 1),
-
-                    // Backup & Quarantine
-                    BackupRetentionIndex = _settingsDb.GetSetting<int>("BackupRetentionIndex", 2),
-                    MaxBackupSizeIndex = _settingsDb.GetSetting<int>("MaxBackupSizeIndex", 1),
-
-                    // Logging
-                    EnableLogging = _settingsDb.GetSetting<bool>("EnableLogging", true),
-                    LogLevelIndex = _settingsDb.GetSetting<int>("LogLevelIndex", 1),
-
-                    // Database & Updates
-                    AutoUpdateDatabase = _settingsDb.GetSetting<bool>("AutoUpdateDatabase", true),
-                    UpdateFrequencyIndex = _settingsDb.GetSetting<int>("UpdateFrequencyIndex", 1),
-
-                    // Gaming Mode
-                    GamingModeEnabled = _settingsDb.GetSetting<bool>("GamingModeEnabled", false),
-                    AutoDetectGames = _settingsDb.GetSetting<bool>("AutoDetectGames", true),
-                    SuppressGamingNotifications = _settingsDb.GetSetting<bool>("SuppressGamingNotifications", true),
-
-                    // USB Protection
-                    AutoScanUsb = _settingsDb.GetSetting<bool>("AutoScanUsb", true),
-                    BlockAutorun = _settingsDb.GetSetting<bool>("BlockAutorun", true),
-
-                    // Ransomware Protection
-                    RansomwareProtection = _settingsDb.GetSetting<bool>("RansomwareProtection", true),
-                    HoneypotFiles = _settingsDb.GetSetting<bool>("HoneypotFiles", true),
-
-                    // Scheduled Scans
-                    ScheduledScansEnabled = _settingsDb.GetSetting<bool>("ScheduledScansEnabled", false),
-
-                    // Startup Services
-                    StartupRealtimeProtection = _settingsDb.GetSetting<bool>("StartupRealtimeProtection", true),
-                    StartupGamingMode = _settingsDb.GetSetting<bool>("StartupGamingMode", true),
-                    StartupUsbProtection = _settingsDb.GetSetting<bool>("StartupUsbProtection", true),
-                    StartupRansomwareProtection = _settingsDb.GetSetting<bool>("StartupRansomwareProtection", true),
-                    StartupScheduledScans = _settingsDb.GetSetting<bool>("StartupScheduledScans", false),
-                    StartupSelfProtection = _settingsDb.GetSetting<bool>("StartupSelfProtection", true)
-                };
+                return UserSettings.Load(_settingsDb);
             }
             catch (Exception ex)
             {
@@ -196,6 +144,9 @@ namespace SkidrowKiller.Views
                 ApplyStartupSetting();
 
                 _logger.Information("Settings saved to SQLite successfully");
+
+                // Push the new values into the running services so the change is real, not just stored.
+                SettingsApplied?.Invoke(this, _settings);
             }
             catch (Exception ex)
             {
@@ -765,6 +716,88 @@ namespace SkidrowKiller.Views
     /// </summary>
     public class UserSettings
     {
+        /// <summary>
+        /// Read every user setting from the settings database. Shared by SettingsView and MainWindow
+        /// so the two can never disagree about defaults.
+        /// </summary>
+        public static UserSettings Load(SettingsDatabase db)
+        {
+            // appsettings.json supplies the DEFAULTS for a machine that has never saved settings.
+            // These keys used to be read by nothing at all.
+            var scanCfg = new ScanningSettings();
+            var backupCfg = new BackupSettings();
+            var updateIntervalHours = 6;
+            try
+            {
+                scanCfg = AppConfiguration.Settings.Scanning;
+                backupCfg = AppConfiguration.Settings.Backup;
+                updateIntervalHours = AppConfiguration.Settings.ThreatIntel.UpdateIntervalHours;
+            }
+            catch { /* configuration unavailable - the built-in defaults above apply */ }
+
+            return new UserSettings
+            {
+                // General
+                StartWithWindows = db.GetSetting<bool>("StartWithWindows", false),
+                StartMinimized = db.GetSetting<bool>("StartMinimized", false),
+                CheckForUpdates = db.GetSetting<bool>("CheckForUpdates", true),
+
+                // Real-time Protection
+                RealtimeProtection = db.GetSetting<bool>("RealtimeProtection", true),
+                MonitorProcesses = db.GetSetting<bool>("MonitorProcesses", true),
+                MonitorNetwork = db.GetSetting<bool>("MonitorNetwork", true),
+                ShowNotifications = db.GetSetting<bool>("ShowNotifications", true),
+
+                // Scanning
+                ScanFiles = db.GetSetting<bool>("ScanFiles", scanCfg.EnableFileScan),
+                ScanRegistry = db.GetSetting<bool>("ScanRegistry", scanCfg.EnableRegistryScan),
+                ScanProcesses = db.GetSetting<bool>("ScanProcesses", scanCfg.EnableProcessScan),
+                ScanNetworkDrives = db.GetSetting<bool>("ScanNetworkDrives", false),
+
+                // Threat Actions
+                ThreatAction = db.GetSetting<int>("ThreatAction", 0),
+                BackupBeforeDelete = db.GetSetting<bool>("BackupBeforeDelete", backupCfg.BackupBeforeRemove),
+                QuarantineOnly = db.GetSetting<bool>("QuarantineOnly", true),
+                SensitivityLevel = db.GetSetting<int>("SensitivityLevel", 1),
+
+                // Backup & Quarantine
+                BackupRetentionIndex = db.GetSetting<int>("BackupRetentionIndex", 1),
+                MaxBackupSizeIndex = db.GetSetting<int>("MaxBackupSizeIndex", 1),
+
+                // Logging
+                EnableLogging = db.GetSetting<bool>("EnableLogging", true),
+                LogLevelIndex = db.GetSetting<int>("LogLevelIndex", 2),
+
+                // Database & Updates
+                AutoUpdateDatabase = db.GetSetting<bool>("AutoUpdateDatabase", true),
+                UpdateFrequencyIndex = db.GetSetting<int>("UpdateFrequencyIndex", IndexForHours(updateIntervalHours)),
+
+                // Gaming Mode
+                GamingModeEnabled = db.GetSetting<bool>("GamingModeEnabled", true),
+                AutoDetectGames = db.GetSetting<bool>("AutoDetectGames", true),
+                SuppressGamingNotifications = db.GetSetting<bool>("SuppressGamingNotifications", true),
+
+                // USB Protection
+                AutoScanUsb = db.GetSetting<bool>("AutoScanUsb", true),
+                BlockAutorun = db.GetSetting<bool>("BlockAutorun", true),
+
+                // Ransomware Protection
+                RansomwareProtection = db.GetSetting<bool>("RansomwareProtection", true),
+                HoneypotFiles = db.GetSetting<bool>("HoneypotFiles", true),
+
+                // Scheduled Scans
+                ScheduledScansEnabled = db.GetSetting<bool>("ScheduledScansEnabled", false),
+
+                // Startup Services
+                StartupRealtimeProtection = db.GetSetting<bool>("StartupRealtimeProtection", true),
+                StartupGamingMode = db.GetSetting<bool>("StartupGamingMode", true),
+                StartupUsbProtection = db.GetSetting<bool>("StartupUsbProtection", true),
+                StartupRansomwareProtection = db.GetSetting<bool>("StartupRansomwareProtection", true),
+                StartupScheduledScans = db.GetSetting<bool>("StartupScheduledScans", false),
+                StartupSelfProtection = db.GetSetting<bool>("StartupSelfProtection", true)
+            };
+        }
+
         // General
         public bool StartWithWindows { get; set; } = false;
         public bool StartMinimized { get; set; } = false;
@@ -872,6 +905,32 @@ namespace SkidrowKiller.Views
                 2 => 12,
                 3 => 24,
                 _ => 6
+            };
+        }
+
+        /// <summary>
+        /// Inverse of <see cref="GetUpdateFrequencyHours"/>: turns ThreatIntel:UpdateIntervalHours
+        /// into the matching combo index so that config key is a real default, not decoration.
+        /// </summary>
+        private static int IndexForHours(int hours) => hours switch
+        {
+            <= 1 => 0,
+            <= 6 => 1,
+            <= 12 => 2,
+            _ => 3
+        };
+
+        /// <summary>Maps the "Log level" combo to a Serilog level.</summary>
+        public Serilog.Events.LogEventLevel GetLogLevel()
+        {
+            return LogLevelIndex switch
+            {
+                0 => Serilog.Events.LogEventLevel.Error,
+                1 => Serilog.Events.LogEventLevel.Warning,
+                2 => Serilog.Events.LogEventLevel.Information,
+                3 => Serilog.Events.LogEventLevel.Debug,
+                4 => Serilog.Events.LogEventLevel.Verbose,
+                _ => Serilog.Events.LogEventLevel.Information
             };
         }
     }

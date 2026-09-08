@@ -14,6 +14,24 @@ namespace SkidrowKiller.Services
     {
         private readonly MalwareSignatureDatabase _signatureDb;
 
+        /// <summary>
+        /// Cap on how much of a file is read for structural analysis, from Scanning:MaxFileSizeMB
+        /// (that key used to be dead - the cap was hardcoded at 100 MB and ignored the config).
+        /// </summary>
+        private static readonly long MaxAnalyzeBytesFromConfig = ResolveMaxAnalyzeBytes();
+
+        private static long ResolveMaxAnalyzeBytes()
+        {
+            try
+            {
+                var mb = AppConfiguration.Settings.Scanning.MaxFileSizeMB;
+                if (mb > 0) return (long)mb * 1024 * 1024;
+            }
+            catch { /* configuration unavailable */ }
+
+            return 100L * 1024 * 1024;
+        }
+
         // PE signature constants
         private const ushort DOS_SIGNATURE = 0x5A4D;        // "MZ"
         private const uint PE_SIGNATURE = 0x00004550;       // "PE\0\0"
@@ -64,7 +82,7 @@ namespace SkidrowKiller.Services
                 // Cap the in-memory read so a single huge file cannot stall the scan or exhaust memory.
                 // PE header/section/import analysis only needs the front of the file; very large executables
                 // (game bundles, installers) are read up to this cap, which is plenty for structural analysis.
-                const long MaxAnalyzeBytes = 100L * 1024 * 1024; // 100 MB
+                var MaxAnalyzeBytes = MaxAnalyzeBytesFromConfig;
                 byte[] content;
                 if (fileInfo.Length > MaxAnalyzeBytes)
                 {

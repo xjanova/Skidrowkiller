@@ -30,6 +30,11 @@ public class ThreatIntelligenceService : IDisposable
     private readonly string _cachePath;
     private bool _disposed;
 
+    // Periodic refresh. ThreatIntel:UpdateIntervalHours used to be dead config - feeds were only
+    // ever refreshed once at startup (or by hand), so a machine left running went stale for days.
+    private Timer? _autoUpdateTimer;
+    private LicenseTier _autoUpdateTier = LicenseTier.Free;
+
     // abuse.ch now requires a free Auth-Key for its downloads; supplied via settings.
     private string _abuseChAuthKey = "";
     // Optional self-hosted, integrity-verified "official" Skidrow feed (highest trust).
@@ -1265,10 +1270,46 @@ public class ThreatIntelligenceService : IDisposable
 
     #endregion
 
+    /// <summary>
+    /// Refresh the feeds every <paramref name="interval"/> for as long as the app runs.
+    /// Calling it again replaces the previous schedule; <see cref="StopAutoUpdate"/> cancels it.
+    /// </summary>
+    public void StartAutoUpdate(TimeSpan interval, LicenseTier tier)
+    {
+        if (_disposed) return;
+
+        // Keep the period sane so a bad setting cannot hammer the feeds.
+        if (interval < TimeSpan.FromMinutes(30)) interval = TimeSpan.FromMinutes(30);
+        if (interval > TimeSpan.FromDays(7)) interval = TimeSpan.FromDays(7);
+
+        _autoUpdateTier = tier;
+
+        StopAutoUpdate();
+        _autoUpdateTimer = new Timer(async _ =>
+        {
+            try
+            {
+                if (IsUpdating) return;
+                await UpdateAllAsync(_autoUpdateTier);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Scheduled threat-intel update failed");
+            }
+        }, null, interval, interval);
+    }
+
+    public void StopAutoUpdate()
+    {
+        _autoUpdateTimer?.Dispose();
+        _autoUpdateTimer = null;
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        StopAutoUpdate();
         _httpClient.Dispose();
         GC.SuppressFinalize(this);
     }

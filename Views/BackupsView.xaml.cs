@@ -79,15 +79,26 @@ namespace SkidrowKiller.Views
 
         private void CleanButton_Click(object sender, RoutedEventArgs e)
         {
+            // Report the retention the user actually configured instead of a hardcoded "7 days".
+            if (_backup.RetentionDays <= 0)
+            {
+                MessageBox.Show(
+                    "Backup retention is set to \"Never delete\" in Settings, so there is nothing to clean.\n\n" +
+                    "Change Settings → Backup & Quarantine → Keep backups for, to enable automatic cleanup.",
+                    "Clean Old Backups",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             var result = MessageBox.Show(
-                "Clean all backups older than 7 days?",
+                $"Clean all backups older than {_backup.RetentionDays} days?",
                 "Clean Old Backups",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Question);
 
             if (result == MessageBoxResult.Yes)
             {
-                _backup.CleanOldBackups(7);
+                _backup.CleanOldBackups();
                 RefreshBackups();
                 MessageBox.Show("Old backups cleaned!", "Complete",
                     MessageBoxButton.OK, MessageBoxImage.Information);

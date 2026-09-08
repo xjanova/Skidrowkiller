@@ -17,6 +17,19 @@ namespace SkidrowKiller.Views
         private readonly SafeScanner _scanner;
         private readonly WhitelistManager _whitelist;
         private readonly BackupManager _backup;
+        private readonly QuarantineService? _quarantine;
+        private readonly ScanReportService _reportService = new();
+
+        // Last finished scan, kept so a report can be produced after the fact.
+        private ScanResult? _lastResult;
+        private ScanMode _lastScanMode = ScanMode.Quick;
+        private List<string> _lastScanPaths = new();
+
+        // Threat-handling policy from Settings -> Threat Actions.
+        // 0 = ask every time, 1 = quarantine automatically, 2 = delete automatically, 3 = log only.
+        private int _threatActionPolicy;
+        private bool _quarantineOnly = true;
+        private bool _includeNetworkDrives;
         private readonly List<ThreatInfo> _foundThreats = new();
         private readonly List<DriveSelection> _drives = new();
         private readonly List<string> _customFolders = new();
@@ -25,12 +38,14 @@ namespace SkidrowKiller.Views
         private DispatcherTimer? _spinTimer;
         private double _currentAngle = 0;
 
-        public ScanView(SafeScanner scanner, WhitelistManager whitelist, BackupManager backup)
+        public ScanView(SafeScanner scanner, WhitelistManager whitelist, BackupManager backup,
+            QuarantineService? quarantine = null)
         {
             InitializeComponent();
             _scanner = scanner;
             _whitelist = whitelist;
             _backup = backup;
+            _quarantine = quarantine;
 
             _scanner.LogAdded += Scanner_LogAdded;
             _scanner.ProgressChanged += Scanner_ProgressChanged;
@@ -83,22 +98,55 @@ namespace SkidrowKiller.Views
 
         private void LoadDrives()
         {
+            // Remember what the user had ticked so a reload (e.g. after toggling network drives in
+            // Settings) does not silently reset their selection.
+            var previouslySelected = _drives
+                .Where(d => d.IsSelected)
+                .Select(d => d.DrivePath)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
             _drives.Clear();
+
             var drives = DriveInfo.GetDrives()
-                .Where(d => d.IsReady && (d.DriveType == DriveType.Fixed || d.DriveType == DriveType.Removable));
+                .Where(d => d.IsReady)
+                .Where(d => d.DriveType == DriveType.Fixed
+                            || d.DriveType == DriveType.Removable
+                            // Network drives only appear when the user asked for them; otherwise the
+                            // "Scan network drives" setting could never take effect, because the
+                            // scanner only ever sees the drives listed here.
+                            || (_includeNetworkDrives && d.DriveType == DriveType.Network));
 
             foreach (var drive in drives)
             {
-                var driveSelection = new DriveSelection
+                string label;
+                long sizeGb;
+                try
                 {
-                    DrivePath = drive.RootDirectory.FullName,
-                    DisplayName = $"{drive.Name} ({drive.VolumeLabel}) - {drive.TotalSize / (1024 * 1024 * 1024):F0} GB",
-                    IsSelected = drive.Name.StartsWith("C"), // Select C: drive by default
+                    label = drive.VolumeLabel;
+                    sizeGb = drive.TotalSize / (1024 * 1024 * 1024);
+                }
+                catch
+                {
+                    // Network shares can throw on VolumeLabel/TotalSize when the host is unreachable.
+                    label = drive.DriveType.ToString();
+                    sizeGb = 0;
+                }
+
+                var path = drive.RootDirectory.FullName;
+                _drives.Add(new DriveSelection
+                {
+                    DrivePath = path,
+                    DisplayName = sizeGb > 0
+                        ? $"{drive.Name} ({label}) - {sizeGb:F0} GB"
+                        : $"{drive.Name} ({label})",
+                    IsSelected = previouslySelected.Count > 0
+                        ? previouslySelected.Contains(path)
+                        : drive.Name.StartsWith("C"), // Select C: drive by default
                     IsEnabled = true
-                };
-                _drives.Add(driveSelection);
+                });
             }
 
+            DrivesList.ItemsSource = null;
             DrivesList.ItemsSource = _drives;
         }
 
@@ -445,6 +493,9 @@ namespace SkidrowKiller.Views
             }
 
             // Start scan with mode, drives, and custom folders
+            _lastScanMode = scanMode;
+            _lastScanPaths = (customFolders?.Count > 0 ? customFolders : selectedDrives) ?? new List<string>();
+
             await _scanner.ScanAsync(scanFiles, scanRegistry, scanProcesses, scanMode, selectedDrives, customFolders);
         }
 
@@ -541,9 +592,12 @@ namespace SkidrowKiller.Views
 
         private void Scanner_ScanCompleted(object? sender, ScanResult result)
         {
+            _lastResult = result;
+
             Dispatcher.Invoke(() =>
             {
                 ResetUI();
+                ReportButton.IsEnabled = true;
 
                 var message = $"Scan completed!\n\n" +
                              $"Total Scanned: {result.TotalScanned:N0}\n" +
@@ -576,8 +630,106 @@ namespace SkidrowKiller.Views
             });
         }
 
+        /// <summary>
+        /// Seed this view from the user's saved settings. Before this existed, the Scanning and
+        /// Threat Actions sections of the Settings screen were stored but never consulted.
+        /// </summary>
+        public void ApplyUserSettings(UserSettings settings)
+        {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => ApplyUserSettings(settings));
+                return;
+            }
+
+            _threatActionPolicy = settings.ThreatAction;
+            _quarantineOnly = settings.QuarantineOnly;
+
+            if (_includeNetworkDrives != settings.ScanNetworkDrives)
+            {
+                _includeNetworkDrives = settings.ScanNetworkDrives;
+                if (!_scanner.IsScanning) LoadDrives();
+            }
+
+            // Don't yank the targets out from under a scan that is already running.
+            if (!_scanner.IsScanning)
+            {
+                ScanFilesCheck.IsChecked = settings.ScanFiles;
+                ScanRegistryCheck.IsChecked = settings.ScanRegistry;
+                ScanProcessesCheck.IsChecked = settings.ScanProcesses;
+            }
+
+            AutoBackupCheck.IsChecked = settings.BackupBeforeDelete;
+            ConfirmDeleteCheck.IsChecked = settings.ThreatAction == 0;
+        }
+
+        /// <summary>
+        /// Dispose of one threat according to the configured policy: quarantine (reversible) when
+        /// "Quarantine only" is set, otherwise a backed-up removal.
+        /// </summary>
+        private async Task<bool> ApplyThreatActionAsync(ThreatInfo threat)
+        {
+            var backup = AutoBackupCheck.IsChecked == true;
+
+            // Only file-backed threats can be quarantined. Registry values, processes and injected
+            // DLLs have nothing to move aside, so they always go through the normal removal path
+            // (which still takes a backup first).
+            var quarantinable = threat.Type is ThreatType.File or ThreatType.Directory;
+
+            if (_quarantineOnly && quarantinable && _quarantine != null)
+            {
+                var result = threat.Type == ThreatType.Directory
+                    ? _quarantine.QuarantineDirectory(threat.Path, threat)
+                    : _quarantine.QuarantineFile(threat.Path, threat);
+
+                if (result.Success)
+                {
+                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] 🔒 Quarantined: {threat.Path}\n");
+                    return true;
+                }
+
+                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ⚠️ Quarantine failed ({result.Message}): {threat.Path}\n");
+                return false;
+            }
+
+            return await _scanner.RemoveThreatAsync(threat, backup);
+        }
+
         private async void ProcessThreats(List<ThreatInfo> threats)
         {
+            // "Ignore (log only)" means exactly that - touch nothing.
+            if (_threatActionPolicy == 3)
+            {
+                foreach (var threat in threats)
+                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ℹ️ Logged only (per settings): {threat.Path}\n");
+
+                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Threat processing completed (log-only mode)\n");
+                LogTextBox.ScrollToEnd();
+                return;
+            }
+
+            // "Quarantine automatically" / "Delete automatically" skip the per-threat prompt entirely.
+            if (_threatActionPolicy == 1 || _threatActionPolicy == 2)
+            {
+                var deleteOutright = _threatActionPolicy == 2 && !_quarantineOnly;
+
+                foreach (var threat in threats)
+                {
+                    if (_whitelist.IsWhitelisted(threat.Path)) continue;
+
+                    var ok = deleteOutright
+                        ? await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true)
+                        : await ApplyThreatActionAsync(threat);
+
+                    if (ok && deleteOutright)
+                        LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                }
+
+                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Threat processing completed\n");
+                LogTextBox.ScrollToEnd();
+                return;
+            }
+
             var confirmNeeded = threats.Where(t => t.RequiresConfirmation).ToList();
             var autoRemove = threats.Where(t => !t.RequiresConfirmation).ToList();
 
@@ -586,8 +738,7 @@ namespace SkidrowKiller.Views
             {
                 if (_whitelist.IsWhitelisted(threat.Path)) continue;
 
-                var backed = await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
-                if (backed)
+                if (await ApplyThreatActionAsync(threat) && !_quarantineOnly)
                 {
                     LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Auto-removed: {threat.Path}\n");
                 }
@@ -607,8 +758,8 @@ namespace SkidrowKiller.Views
                     // Handle bulk actions
                     if (removeAll)
                     {
-                        await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
-                        LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                        if (await ApplyThreatActionAsync(threat) && !_quarantineOnly)
+                            LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
                         continue;
                     }
                     if (skipAll)
@@ -634,14 +785,14 @@ namespace SkidrowKiller.Views
                         switch (dialog.SelectedAction)
                         {
                             case ThreatAction.Remove:
-                                await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
-                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                                if (await ApplyThreatActionAsync(threat) && !_quarantineOnly)
+                                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
                                 break;
 
                             case ThreatAction.RemoveAll:
                                 removeAll = true;
-                                await _scanner.RemoveThreatAsync(threat, AutoBackupCheck.IsChecked == true);
-                                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
+                                if (await ApplyThreatActionAsync(threat) && !_quarantineOnly)
+                                    LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Removed: {threat.Path}\n");
                                 break;
 
                             case ThreatAction.Skip:
@@ -664,6 +815,65 @@ namespace SkidrowKiller.Views
 
             LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] ✅ Threat processing completed\n");
             LogTextBox.ScrollToEnd();
+        }
+
+        /// <summary>
+        /// Write a report for the last scan. ScanReportService could already render HTML/TXT/CSV/JSON
+        /// but nothing in the app ever called it, so the feature was unreachable.
+        /// </summary>
+        private async void ReportButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_lastResult == null)
+            {
+                MessageBox.Show("Run a scan first - there is nothing to report on yet.",
+                    "No Scan Data", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            ReportButton.IsEnabled = false;
+            try
+            {
+                var data = new ScanReportData
+                {
+                    ScanDate = DateTime.Now - _lastResult.Duration,
+                    ScanType = _lastScanMode switch
+                    {
+                        ScanMode.Quick => "Quick Scan",
+                        ScanMode.Deep => "Deep Scan",
+                        _ => "Custom Scan"
+                    },
+                    Duration = _lastResult.Duration,
+                    ItemsScanned = (int)Math.Min(_lastResult.TotalScanned, int.MaxValue),
+                    ThreatsRemoved = _lastResult.ThreatsRemoved,
+                    ThreatsQuarantined = _quarantineOnly ? _lastResult.ThreatsRemoved : 0,
+                    Threats = _lastResult.Threats,
+                    ScannedPaths = _lastScanPaths
+                };
+
+                var path = await _reportService.GenerateReportAsync(data, ReportFormat.Html);
+
+                LogTextBox.AppendText($"[{DateTime.Now:HH:mm:ss}] 📄 Report saved: {path}\n");
+                LogTextBox.ScrollToEnd();
+
+                if (MessageBox.Show($"Report saved to:\n{path}\n\nOpen it now?", "Report Ready",
+                        MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = path,
+                        UseShellExecute = true
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not generate the report: {ex.Message}", "Report Failed",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                ReportButton.IsEnabled = true;
+            }
         }
 
         private void ResetUI()

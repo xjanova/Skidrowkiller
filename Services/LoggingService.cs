@@ -1,5 +1,6 @@
 using System.IO;
 using Serilog;
+using Serilog.Core;
 using Serilog.Events;
 
 namespace SkidrowKiller.Services
@@ -11,6 +12,23 @@ namespace SkidrowKiller.Services
     {
         private static bool _isInitialized;
         private static readonly object _lock = new();
+
+        /// <summary>
+        /// Runtime-adjustable minimum level. Serilog reads this switch on every write, so the
+        /// Settings screen can raise/lower verbosity (or silence logging) without a restart.
+        /// </summary>
+        private static readonly LoggingLevelSwitch _levelSwitch = new(LogEventLevel.Information);
+
+        /// <summary>Level that suppresses everything (one above Fatal) - Serilog's documented "off" value.</summary>
+        private const LogEventLevel OffLevel = (LogEventLevel)((int)LogEventLevel.Fatal + 1);
+
+        private static LogEventLevel _configuredLevel = LogEventLevel.Information;
+
+        /// <summary>The level logging returns to when it is re-enabled.</summary>
+        public static LogEventLevel MinimumLevel => _configuredLevel;
+
+        /// <summary>False while logging is suppressed via <see cref="SetLoggingEnabled"/>.</summary>
+        public static bool IsLoggingEnabled => _levelSwitch.MinimumLevel != OffLevel;
 
         /// <summary>
         /// Initialize the logging service
@@ -34,8 +52,11 @@ namespace SkidrowKiller.Services
 
                 var logFilePath = Path.Combine(logDirectory, "skidrowkiller-.log");
 
+                _configuredLevel = ParseLogLevel(settings.MinimumLevel);
+                _levelSwitch.MinimumLevel = _configuredLevel;
+
                 var logConfig = new LoggerConfiguration()
-                    .MinimumLevel.Is(ParseLogLevel(settings.MinimumLevel))
+                    .MinimumLevel.ControlledBy(_levelSwitch)
                     .Enrich.WithProperty("Application", AppConfiguration.Settings.Application.Name)
                     .Enrich.WithProperty("Version", AppConfiguration.Settings.Application.Version)
                     .Enrich.WithProperty("Environment", AppConfiguration.Settings.Application.Environment);
@@ -78,6 +99,36 @@ namespace SkidrowKiller.Services
             Log.Information("Logging service shutting down");
             Log.CloseAndFlush();
             _isInitialized = false;
+        }
+
+        /// <summary>
+        /// Change the minimum log level at runtime (Settings -> Logging -> Log level).
+        /// </summary>
+        public static void SetMinimumLevel(LogEventLevel level)
+        {
+            _configuredLevel = level;
+            if (IsLoggingEnabled)
+                _levelSwitch.MinimumLevel = level;
+
+            Log.Information("Log level set to {Level}", level);
+        }
+
+        /// <summary>
+        /// Turn logging on/off at runtime (Settings -> Logging -> Enable logging).
+        /// Off is implemented as a level above Fatal so no sink is ever reached.
+        /// </summary>
+        public static void SetLoggingEnabled(bool enabled)
+        {
+            if (enabled)
+            {
+                _levelSwitch.MinimumLevel = _configuredLevel;
+                Log.Information("Logging enabled (level {Level})", _configuredLevel);
+            }
+            else
+            {
+                Log.Information("Logging disabled by user setting");
+                _levelSwitch.MinimumLevel = OffLevel;
+            }
         }
 
         private static LogEventLevel ParseLogLevel(string level)

@@ -28,9 +28,35 @@ namespace SkidrowKiller.Services
 
         public event EventHandler<string>? LogAdded;
 
+        /// <summary>
+        /// Days a backup is kept before <see cref="CleanOldBackups()"/> removes it.
+        /// 0 (or less) means "never delete". Seeded from Backup:RetentionDays, overridden by Settings.
+        /// </summary>
+        public int RetentionDays { get; set; }
+
+        /// <summary>
+        /// Cap on the total size of the backup folder in MB. 0 (or less) means unlimited.
+        /// When a new backup would exceed it, the oldest backups are evicted first; if it still
+        /// does not fit, the backup is refused rather than blowing past the user's limit.
+        /// </summary>
+        public int MaxBackupSizeMB { get; set; }
+
         public BackupManager(SettingsDatabase? db = null)
         {
             _db = db;
+
+            // Backup:RetentionDays and Backup:MaxBackupSizeMB used to be read by nothing at all.
+            try
+            {
+                var cfg = AppConfiguration.Settings.Backup;
+                RetentionDays = cfg.RetentionDays;
+                MaxBackupSizeMB = cfg.MaxBackupSizeMB;
+            }
+            catch
+            {
+                RetentionDays = 7;
+                MaxBackupSizeMB = 1024;
+            }
 
             _backupFolder = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -64,6 +90,9 @@ namespace SkidrowKiller.Services
                         IsDirectory = false,
                         Size = new FileInfo(filePath).Length
                     };
+
+                    if (!MakeRoomFor(entry.Size))
+                        return null;
 
                     var backupName = $"{entry.Id}_{Path.GetFileName(filePath)}";
                     entry.BackupPath = Path.Combine(_backupFolder, backupName);
@@ -106,6 +135,9 @@ namespace SkidrowKiller.Services
                     entry.Size = new DirectoryInfo(directoryPath)
                         .EnumerateFiles("*", SearchOption.AllDirectories)
                         .Sum(f => f.Length);
+
+                    if (!MakeRoomFor(entry.Size))
+                        return null;
 
                     // Create zip backup
                     ZipFile.CreateFromDirectory(directoryPath, entry.BackupPath, CompressionLevel.Fastest, true);
@@ -321,8 +353,14 @@ namespace SkidrowKiller.Services
             }
         }
 
-        public void CleanOldBackups(int keepDays = 7)
+        /// <summary>Apply the configured <see cref="RetentionDays"/>.</summary>
+        public void CleanOldBackups() => CleanOldBackups(RetentionDays);
+
+        public void CleanOldBackups(int keepDays)
         {
+            // A non-positive retention means "never delete" (the "Never delete" option in Settings).
+            if (keepDays <= 0) return;
+
             lock (_lock)
             {
                 var cutoff = DateTime.Now.AddDays(-keepDays);
@@ -332,7 +370,42 @@ namespace SkidrowKiller.Services
                 {
                     DeleteBackup(backup.Id);
                 }
+
+                if (oldBackups.Count > 0)
+                    RaiseLog($"[BACKUP] Removed {oldBackups.Count} backup(s) older than {keepDays} day(s)");
             }
+        }
+
+        /// <summary>
+        /// Evict oldest backups until <paramref name="incomingBytes"/> fits inside the size cap.
+        /// Returns false when even an empty folder could not hold it - the caller must not proceed.
+        /// Caller already holds <see cref="_lock"/>.
+        /// </summary>
+        private bool MakeRoomFor(long incomingBytes)
+        {
+            if (MaxBackupSizeMB <= 0) return true; // Unlimited
+
+            var limit = (long)MaxBackupSizeMB * 1024 * 1024;
+
+            if (incomingBytes > limit)
+            {
+                RaiseLog($"[BACKUP] Skipped: item is {incomingBytes / (1024 * 1024)} MB, over the {MaxBackupSizeMB} MB backup limit");
+                return false;
+            }
+
+            var current = GetBackups().Sum(b => b.Size);
+            if (current + incomingBytes <= limit) return true;
+
+            foreach (var oldest in GetBackups().OrderBy(b => b.BackedUpAt).ToList())
+            {
+                DeleteBackup(oldest.Id);
+                current -= oldest.Size;
+                RaiseLog($"[BACKUP] Evicted old backup '{oldest.Name}' to stay under the {MaxBackupSizeMB} MB limit");
+
+                if (current + incomingBytes <= limit) return true;
+            }
+
+            return current + incomingBytes <= limit;
         }
 
         private void RaiseLog(string message)

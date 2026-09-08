@@ -171,6 +171,9 @@ namespace SkidrowKiller.Services
         public bool EnableEntropyAnalysis { get; set; } = true;
         public bool EnableVirusTotalLookup { get; set; } = false; // Disabled by default (needs API key)
 
+        /// <summary>One row of <see cref="GetDetectionLayers"/>.</summary>
+        public sealed record DetectionLayerStatus(string Name, bool IsActive, string Detail);
+
         /// <summary>
         /// Optional local learning layer. When set, final scores are adjusted by what the app has
         /// learned from the user's whitelist/restore/removal decisions (bounded + fully auditable).
@@ -232,6 +235,10 @@ namespace SkidrowKiller.Services
             _heuristicEngine = new HeuristicEngine(_signatureDb, _peAnalyzer);
             _behavioralAnalyzer = new BehavioralAnalyzer(null);
             _entropyAnalyzer = new EntropyAnalyzer(null);
+            // Create the cloud client up front (unconfigured, so it costs nothing) - previously this
+            // ctor left it null, which made ConfigureVirusTotal a silent no-op no matter what key the
+            // user supplied, while the UI still advertised a live "Cloud (VirusTotal)" layer.
+            _virusTotalService = new VirusTotalService();
             ApplyConfiguredThresholds();
         }
 
@@ -257,15 +264,65 @@ namespace SkidrowKiller.Services
         }
 
         /// <summary>
-        /// Configures VirusTotal integration
+        /// Configures VirusTotal integration. Passing an empty key turns the lookup back off
+        /// instead of leaving a "cloud enabled" flag set with no credentials behind it.
         /// </summary>
-        public void ConfigureVirusTotal(string apiKey)
+        public void ConfigureVirusTotal(string? apiKey)
         {
-            if (_virusTotalService != null && !string.IsNullOrEmpty(apiKey))
+            if (_virusTotalService == null) return;
+
+            if (string.IsNullOrWhiteSpace(apiKey))
             {
-                _virusTotalService.Configure(apiKey);
-                EnableVirusTotalLookup = true;
+                _virusTotalService.Configure(string.Empty);
+                EnableVirusTotalLookup = false;
+                return;
             }
+
+            _virusTotalService.Configure(apiKey.Trim());
+            EnableVirusTotalLookup = true;
+        }
+
+        /// <summary>True when a VirusTotal API key is present and cloud lookup is on.</summary>
+        public bool IsVirusTotalActive =>
+            EnableVirusTotalLookup && _virusTotalService is { IsConfigured: true };
+
+        /// <summary>
+        /// The live state of every detection layer. The Threat Intelligence screen used to paint
+        /// eight green "active" chips unconditionally, including layers that were never even
+        /// constructed - this is what it reads instead.
+        /// </summary>
+        public IReadOnlyList<DetectionLayerStatus> GetDetectionLayers()
+        {
+            return new List<DetectionLayerStatus>
+            {
+                new("Authenticode Signature", true,
+                    "Verifies the digital signature of every executable"),
+
+                new("Heuristics", EnableHeuristicAnalysis,
+                    EnableHeuristicAnalysis ? "Static rules over PE structure and content" : "Turned off"),
+
+                new("Entropy / Packing", EnableEntropyAnalysis && _entropyAnalyzer != null,
+                    _entropyAnalyzer == null ? "Analyzer not loaded"
+                        : EnableEntropyAnalysis ? "Detects packed and obfuscated binaries" : "Turned off"),
+
+                new("Behavioral", EnableBehavioralAnalysis && _behavioralAnalyzer != null,
+                    _behavioralAnalyzer == null ? "Analyzer not loaded"
+                        : EnableBehavioralAnalysis ? "Flags malicious API and string behaviour" : "Turned off"),
+
+                new("YARA Rules", _signatureDb.TotalYaraRules > 0,
+                    $"{_signatureDb.TotalYaraRules:N0} rule(s) loaded"),
+
+                new("Hash Reputation", _signatureDb.TotalHashes > 0,
+                    $"{_signatureDb.TotalHashes:N0} known-bad hash(es)"),
+
+                new("AI Learning", Reputation != null,
+                    Reputation != null ? "Local reputation memory is learning from your decisions"
+                                       : "Reputation service not attached"),
+
+                new("Cloud (VirusTotal)", IsVirusTotalActive,
+                    IsVirusTotalActive ? "Cloud lookup enabled"
+                                       : "Add a VirusTotal API key to enable cloud lookup")
+            };
         }
 
         /// <summary>

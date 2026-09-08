@@ -28,15 +28,18 @@ namespace SkidrowKiller.Services
         private readonly HashSet<string> _blockedPatterns = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, BlockedDomainInfo> _domainDatabase = new(StringComparer.OrdinalIgnoreCase);
 
-        // Active blocks and alerts
+        // Active blocks and alerts. _activeBlocks is touched by BOTH the connection loop and the DNS
+        // loop, so every read/write goes through _blockLock.
         private readonly HashSet<string> _activeBlocks = new(StringComparer.OrdinalIgnoreCase);
+        private readonly object _blockLock = new();
         private readonly Dictionary<string, DateTime> _recentAlerts = new();
         private readonly object _alertLock = new();
+        private bool _hostsEntriesApplied;
 
         // Statistics
         private int _blockedConnections;
         private int _totalChecks;
-        private int _domainsBlocked;
+        private int _connectionsTerminated;
 
         // Native imports for connection monitoring
         [DllImport("iphlpapi.dll", SetLastError = true)]
@@ -44,6 +47,23 @@ namespace SkidrowKiller.Services
 
         [DllImport("iphlpapi.dll", SetLastError = true)]
         private static extern uint GetExtendedUdpTable(IntPtr pUdpTable, ref int pdwSize, bool bOrder, int ulAf, UdpTableClass tableClass, uint reserved);
+
+        // Used to actually TEAR DOWN an established TCP connection (state -> DELETE_TCB).
+        // Requires administrator rights, which the app manifest already demands.
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        private static extern int SetTcpEntry(ref MIB_TCPROW row);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MIB_TCPROW
+        {
+            public uint dwState;
+            public uint dwLocalAddr;
+            public uint dwLocalPort;
+            public uint dwRemoteAddr;
+            public uint dwRemotePort;
+        }
+
+        private const uint MIB_TCP_STATE_DELETE_TCB = 12;
 
         private enum TcpTableClass
         {
@@ -70,6 +90,12 @@ namespace SkidrowKiller.Services
         public int BlockedConnections => _blockedConnections;
         public int TotalChecks => _totalChecks;
         public int DomainsInDatabase => _blockedDomains.Count;
+
+        /// <summary>Live TCP connections we actually tore down (not just logged).</summary>
+        public int ConnectionsTerminated => _connectionsTerminated;
+
+        /// <summary>Domains currently written into the system hosts file by us.</summary>
+        public int DomainsBlockedInHosts { get { lock (_blockLock) { return _activeBlocks.Count; } } }
 
         public NetworkProtectionService(ThreatAnalyzer analyzer)
         {
@@ -253,15 +279,28 @@ namespace SkidrowKiller.Services
             StatusChanged?.Invoke(this, ProtectionStatus.Safe);
         }
 
-        public void Stop()
+        public void Stop() => Stop(removeHostsBlocks: true);
+
+        /// <summary>
+        /// Stop monitoring. <paramref name="removeHostsBlocks"/> is true when the user actually turned
+        /// protection off - the hosts entries are system-wide and outlive the process, so leaving them
+        /// behind kept every listed domain unreachable long after protection was disabled. It is false
+        /// when the app is merely closing with protection still enabled, so the blocks stay in force.
+        /// </summary>
+        public void Stop(bool removeHostsBlocks)
         {
             if (!IsRunning) return;
 
             _cts?.Cancel();
             IsRunning = false;
 
+            if (removeHostsBlocks && _hostsEntriesApplied)
+            {
+                RemoveHostsFileBlocks();
+            }
+
             RaiseLog("🌐 [NETWORK] Web protection stopped");
-            RaiseLog($"   📊 Blocked {_blockedConnections} connections, checked {_totalChecks} requests");
+            RaiseLog($"   📊 Detected {_blockedConnections} connections ({_connectionsTerminated} terminated), checked {_totalChecks} requests");
         }
 
         private async Task MonitorConnectionsLoop(CancellationToken token)
@@ -363,6 +402,11 @@ namespace SkidrowKiller.Services
             var domainInfo = GetDomainInfo(hostname);
             var processName = GetProcessName(conn.ProcessId);
 
+            // Actually sever the live socket. Without this the "Blocked" label was cosmetic: a hosts
+            // entry only affects the NEXT DNS lookup, so the connection already in flight kept running.
+            var terminated = TerminateConnection(conn);
+            if (terminated) Interlocked.Increment(ref _connectionsTerminated);
+
             var blockedEvent = new NetworkBlockedEvent
             {
                 Timestamp = DateTime.Now,
@@ -372,13 +416,15 @@ namespace SkidrowKiller.Services
                 ProcessId = conn.ProcessId,
                 ProcessName = processName,
                 Category = domainInfo?.Category ?? "Unknown",
-                Description = domainInfo?.Description ?? "Blocked by pattern rule",
+                Description = domainInfo?.Description ?? "Matched a blocked pattern rule",
                 ThreatLevel = domainInfo?.ThreatLevel ?? 7,
-                Action = "Blocked"
+                Action = terminated ? "Blocked" : "Detected"
             };
 
-            // Log the block
-            RaiseLog($"🚫 [BLOCKED] Connection to potentially risky site");
+            // Report honestly: say whether the connection was cut or only flagged.
+            RaiseLog(terminated
+                ? "🚫 [BLOCKED] Connection to a risky site was terminated"
+                : "⚠️ [DETECTED] Connection to a risky site (could not terminate - flagged only)");
             RaiseLog($"   Domain: {hostname}");
             RaiseLog($"   App: {processName} (PID: {conn.ProcessId})");
             RaiseLog($"   Category: {blockedEvent.Category}");
@@ -394,12 +440,55 @@ namespace SkidrowKiller.Services
                 await KillProcessAsync(conn.ProcessId, processName);
             }
 
-            // Add to hosts file if not already blocked
-            if (HostsFileProtection && !_activeBlocks.Contains(hostname))
+            // Add to hosts file so the next lookup fails too.
+            if (HostsFileProtection)
             {
-                AddToHostsFile(hostname);
-                _activeBlocks.Add(hostname);
+                bool added;
+                lock (_blockLock) { added = _activeBlocks.Add(hostname); }
+                if (added) AddToHostsFile(hostname);
             }
+        }
+
+        /// <summary>
+        /// Tear down an established TCP connection by setting its state to DELETE_TCB.
+        /// Returns false (without throwing) when the row cannot be addressed - IPv6, already closed,
+        /// or insufficient rights - so the caller reports the truth instead of claiming a block.
+        /// </summary>
+        private bool TerminateConnection(TcpConnectionInfo conn)
+        {
+            try
+            {
+                if (!IPAddress.TryParse(conn.LocalIp, out var local) ||
+                    !IPAddress.TryParse(conn.RemoteAddress, out var remote))
+                    return false;
+
+                // SetTcpEntry is IPv4-only.
+                if (local.AddressFamily != AddressFamily.InterNetwork ||
+                    remote.AddressFamily != AddressFamily.InterNetwork)
+                    return false;
+
+                var row = new MIB_TCPROW
+                {
+                    dwState = MIB_TCP_STATE_DELETE_TCB,
+                    dwLocalAddr = BitConverter.ToUInt32(local.GetAddressBytes(), 0),
+                    dwLocalPort = HostToNetworkPort(conn.LocalPort),
+                    dwRemoteAddr = BitConverter.ToUInt32(remote.GetAddressBytes(), 0),
+                    dwRemotePort = HostToNetworkPort(conn.RemotePort)
+                };
+
+                return SetTcpEntry(ref row) == 0;
+            }
+            catch (Exception ex)
+            {
+                RaiseLog($"⚠️ [NETWORK] Could not terminate connection: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>Port in the byte layout MIB_TCPROW expects (network order in the low 16 bits).</summary>
+        private static uint HostToNetworkPort(int port)
+        {
+            return (uint)(((port & 0xFF) << 8) | ((port >> 8) & 0xFF));
         }
 
         private string GetProcessName(int processId)
@@ -479,16 +568,19 @@ namespace SkidrowKiller.Services
                 {
                     var domain = match.Groups[1].Value.Trim();
 
-                    if (IsDomainBlocked(domain) && !_activeBlocks.Contains(domain))
-                    {
-                        RaiseLog($"🔍 [DNS] Detected query to blocked domain: {domain}");
+                    if (!IsDomainBlocked(domain)) continue;
 
-                        if (HostsFileProtection)
-                        {
-                            AddToHostsFile(domain);
-                            _activeBlocks.Add(domain);
-                            Interlocked.Increment(ref _domainsBlocked);
-                        }
+                    bool alreadyBlocked;
+                    lock (_blockLock) { alreadyBlocked = _activeBlocks.Contains(domain); }
+                    if (alreadyBlocked) continue;
+
+                    RaiseLog($"🔍 [DNS] Detected query to blocked domain: {domain}");
+
+                    if (HostsFileProtection)
+                    {
+                        bool added;
+                        lock (_blockLock) { added = _activeBlocks.Add(domain); }
+                        if (added) AddToHostsFile(domain);
                     }
                 }
             }
@@ -526,10 +618,13 @@ namespace SkidrowKiller.Services
                 newEntries.AppendLine($"# Generated: {DateTime.Now}");
                 newEntries.AppendLine();
 
-                foreach (var domain in _blockedDomains.Take(500)) // Limit to prevent huge files
+                lock (_blockLock)
                 {
-                    newEntries.AppendLine($"0.0.0.0 {domain}");
-                    _activeBlocks.Add(domain);
+                    foreach (var domain in _blockedDomains.Take(500)) // Limit to prevent huge files
+                    {
+                        newEntries.AppendLine($"0.0.0.0 {domain}");
+                        _activeBlocks.Add(domain);
+                    }
                 }
 
                 newEntries.AppendLine();
@@ -537,9 +632,9 @@ namespace SkidrowKiller.Services
 
                 // Write back
                 File.WriteAllText(_hostsFilePath, hostsContent + newEntries.ToString());
+                _hostsEntriesApplied = true;
 
-                _domainsBlocked = _activeBlocks.Count;
-                RaiseLog($"✅ [HOSTS] Applied {_activeBlocks.Count} domain blocks to hosts file");
+                RaiseLog($"✅ [HOSTS] Applied {DomainsBlockedInHosts} domain blocks to hosts file");
 
                 // Flush DNS cache
                 FlushDnsCache();
@@ -564,7 +659,8 @@ namespace SkidrowKiller.Services
                 hostsContent = RemoveOurHostsEntries(hostsContent);
                 File.WriteAllText(_hostsFilePath, hostsContent);
 
-                _activeBlocks.Clear();
+                lock (_blockLock) { _activeBlocks.Clear(); }
+                _hostsEntriesApplied = false;
                 RaiseLog("✅ [HOSTS] Removed all protection entries from hosts file");
 
                 FlushDnsCache();
@@ -597,6 +693,7 @@ namespace SkidrowKiller.Services
                         var newEntry = $"0.0.0.0 {domain}\n0.0.0.0 www.{domain}\n";
                         hostsContent = hostsContent.Insert(insertPos, newEntry);
                         File.WriteAllText(_hostsFilePath, hostsContent);
+                        _hostsEntriesApplied = true;
 
                         RaiseLog($"✅ [HOSTS] Blocked: {domain}");
                         FlushDnsCache();
@@ -660,18 +757,22 @@ namespace SkidrowKiller.Services
                     {
                         try
                         {
-                            var foreignParts = parts[2].Split(':');
-                            if (foreignParts.Length >= 2)
+                            // Split on the LAST colon so IPv6 endpoints ("[::1]:443") survive; the old
+                            // Split(':')[0] turned every IPv6 address into "[" and silently dropped it.
+                            if (!TrySplitEndpoint(parts[1], out var localIp, out var localPort)) continue;
+                            if (!TrySplitEndpoint(parts[2], out var remoteIp, out var remotePort)) continue;
+                            if (!int.TryParse(parts[4], out var pid)) continue;
+
+                            connections.Add(new TcpConnectionInfo
                             {
-                                connections.Add(new TcpConnectionInfo
-                                {
-                                    LocalAddress = parts[1],
-                                    RemoteAddress = foreignParts[0],
-                                    RemotePort = int.Parse(foreignParts.Last()),
-                                    State = parts[3],
-                                    ProcessId = int.Parse(parts[4])
-                                });
-                            }
+                                LocalAddress = parts[1],
+                                LocalIp = localIp,
+                                LocalPort = localPort,
+                                RemoteAddress = remoteIp,
+                                RemotePort = remotePort,
+                                State = parts[3],
+                                ProcessId = pid
+                            });
                         }
                         catch { }
                     }
@@ -680,6 +781,23 @@ namespace SkidrowKiller.Services
             catch { }
 
             return connections;
+        }
+
+        /// <summary>
+        /// Split a netstat endpoint ("1.2.3.4:443" or "[::1]:443") into address and port.
+        /// </summary>
+        private static bool TrySplitEndpoint(string endpoint, out string address, out int port)
+        {
+            address = string.Empty;
+            port = 0;
+
+            if (string.IsNullOrWhiteSpace(endpoint)) return false;
+
+            var idx = endpoint.LastIndexOf(':');
+            if (idx <= 0 || idx == endpoint.Length - 1) return false;
+
+            address = endpoint[..idx].Trim('[', ']');
+            return int.TryParse(endpoint[(idx + 1)..], out port);
         }
 
         #endregion
@@ -1314,7 +1432,8 @@ namespace SkidrowKiller.Services
 
         public void Dispose()
         {
-            Stop();
+            // Closing the app is not the same as switching protection off - keep the hosts blocks.
+            Stop(removeHostsBlocks: false);
             _cts?.Dispose();
         }
 
@@ -1330,7 +1449,13 @@ namespace SkidrowKiller.Services
 
     public class TcpConnectionInfo
     {
+        /// <summary>Raw "address:port" text as netstat printed it.</summary>
         public string LocalAddress { get; set; } = string.Empty;
+
+        /// <summary>Local address without the port - needed to address the TCP row for termination.</summary>
+        public string LocalIp { get; set; } = string.Empty;
+        public int LocalPort { get; set; }
+
         public string RemoteAddress { get; set; } = string.Empty;
         public int RemotePort { get; set; }
         public string State { get; set; } = string.Empty;

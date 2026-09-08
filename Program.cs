@@ -58,6 +58,7 @@ namespace SkidrowKiller
                     AppConfiguration.Settings.Application.Environment);
 
                 var app = new App();
+                App.StartupArgs = args ?? Array.Empty<string>();
                 app.InitializeComponent();
                 app.Run();
             }

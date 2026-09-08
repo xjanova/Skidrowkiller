@@ -58,6 +58,12 @@ namespace SkidrowKiller
         private System.Windows.Threading.DispatcherTimer? _statusBarTimer;
         private bool _disposed;
 
+        /// <summary>Settings -> Real-time Protection -> Show notifications.</summary>
+        private bool _showNotifications = true;
+
+        /// <summary>Running total of threats found this session (badge counter).</summary>
+        private int _sessionThreatCount;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -81,6 +87,12 @@ namespace SkidrowKiller
                 _backupManager = new BackupManager(_settingsDb);
                 _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
                 _selfTest = new SelfTestService(_analyzer);
+
+                // A saved VirusTotal key has to reach the engine at startup - otherwise the cloud
+                // layer only came alive after the user happened to open the Threat Intel screen.
+                var vtKey = _settingsDb.GetSetting<string>("VirusTotalApiKey", string.Empty);
+                if (!string.IsNullOrWhiteSpace(vtKey))
+                    _analyzer.ConfigureVirusTotal(vtKey);
                 _scanner = new SafeScanner(_analyzer, _whitelistManager, _backupManager);
                 _protection = new ProtectionService(_analyzer, _whitelistManager);
                 _processGuard = new RealtimeProcessGuard(_analyzer, _whitelistManager);
@@ -117,7 +129,7 @@ namespace SkidrowKiller
                 _homeView = new HomeView(_settingsDb, _quarantine, _threatIntel, _protection, _selfTest);
                 _homeView.QuickScanRequested += (s, e) => NavButton_Click(NavScan, new RoutedEventArgs());
                 _homeView.UpdateIntelRequested += (s, e) => NavButton_Click(NavThreatIntel, new RoutedEventArgs());
-                _scanView = new ScanView(_scanner, _whitelistManager, _backupManager);
+                _scanView = new ScanView(_scanner, _whitelistManager, _backupManager, _quarantine);
                 _monitorView = new MonitorView(_protection);
                 _threatsView = new ThreatsView(_scanner, _whitelistManager, _backupManager, _quarantine);
                 _whitelistView = new WhitelistView(_whitelistManager);
@@ -126,6 +138,7 @@ namespace SkidrowKiller
                 _settingsView = new SettingsView(_settingsDb);
                 _settingsView.SetServices(_threatIntel, _licenseService);
                 _settingsView.NavigateToThreatIntelRequested += SettingsView_NavigateToThreatIntel;
+                _settingsView.SettingsApplied += SettingsView_SettingsApplied;
                 _licenseView = new LicenseView(_licenseService);
                 _networkProtectionView = new NetworkProtectionView(_networkProtection, _analyzer, _quarantine);
                 _browserProtectionView = new BrowserProtectionView(_browserProtection);
@@ -134,7 +147,7 @@ namespace SkidrowKiller
                 _ransomwareProtectionView = new RansomwareProtectionView(_ransomwareProtection);
                 _scheduledScanView = new ScheduledScanView(_scheduledScan);
                 _gamingModeView = new GamingModeView(_gamingMode);
-                _threatIntelView = new ThreatIntelligenceView(_threatIntel, _licenseService);
+                _threatIntelView = new ThreatIntelligenceView(_threatIntel, _licenseService, _analyzer, _settingsDb);
 
                 // Update license badge
                 UpdateLicenseBadge();
@@ -166,21 +179,26 @@ namespace SkidrowKiller
 
         private void Scanner_ThreatFound(object? sender, Models.ThreatInfo threat)
         {
-            Dispatcher.Invoke(() =>
-            {
-                ThreatCountBadge.Visibility = Visibility.Visible;
-                ThreatCountText.Text = _scanner.IsScanning ? "!" : "1";
-            });
+            // The badge used to be hardcoded to "!" or "1" no matter how many threats were found.
+            var count = System.Threading.Interlocked.Increment(ref _sessionThreatCount);
+            Dispatcher.Invoke(() => ShowThreatBadge(count));
         }
 
         private void ProcessGuard_ThreatDetected(object? sender, Models.ThreatInfo threat)
         {
+            var count = System.Threading.Interlocked.Increment(ref _sessionThreatCount);
             Dispatcher.Invoke(() =>
             {
-                ThreatCountBadge.Visibility = Visibility.Visible;
-                ThreatCountText.Text = "!";
-                SetStatusBarMessage($"Real-time: {threat.Name} — {threat.Description}");
+                ShowThreatBadge(count);
+                if (_showNotifications && !_gamingMode.NotificationsSuppressed)
+                    SetStatusBarMessage($"Real-time: {threat.Name} — {threat.Description}");
             });
+        }
+
+        private void ShowThreatBadge(int count)
+        {
+            ThreatCountBadge.Visibility = Visibility.Visible;
+            ThreatCountText.Text = count > 99 ? "99+" : count.ToString();
         }
 
         private void Protection_StatusChanged(object? sender, ProtectionStatus status)
@@ -353,36 +371,24 @@ namespace SkidrowKiller
                 }
                 catch (Exception ex) { _logger.Warning(ex, "Threat-intel startup wiring failed"); }
 
-                // Load user settings from SQLite database
-                var settings = new Views.UserSettings
+                // Load the FULL user settings (not just the six startup flags) and push every one of
+                // them into the live services. Previously most of the Settings screen was write-only.
+                var settings = Views.UserSettings.Load(_settingsDb);
+
+                ApplyUserSettings(settings, isStartup: true);
+
+                // Updates:CheckForUpdatesOnStartup and the user's "Check for updates" checkbox were
+                // both ignored - the check fired unconditionally from App.OnStartup. Honour them now.
+                if (AppConfiguration.Settings.Updates.CheckForUpdatesOnStartup && settings.CheckForUpdates)
                 {
-                    // Startup Services
-                    StartupRealtimeProtection = _settingsDb.GetSetting<bool>("StartupRealtimeProtection", true),
-                    StartupGamingMode = _settingsDb.GetSetting<bool>("StartupGamingMode", true),
-                    StartupUsbProtection = _settingsDb.GetSetting<bool>("StartupUsbProtection", true),
-                    StartupRansomwareProtection = _settingsDb.GetSetting<bool>("StartupRansomwareProtection", true),
-                    StartupScheduledScans = _settingsDb.GetSetting<bool>("StartupScheduledScans", false),
-                    StartupSelfProtection = _settingsDb.GetSetting<bool>("StartupSelfProtection", true),
-
-                    // Gaming Mode settings
-                    AutoDetectGames = _settingsDb.GetSetting<bool>("AutoDetectGames", true),
-                    SuppressGamingNotifications = _settingsDb.GetSetting<bool>("SuppressGamingNotifications", true),
-
-                    // USB Protection settings
-                    AutoScanUsb = _settingsDb.GetSetting<bool>("AutoScanUsb", true),
-                    BlockAutorun = _settingsDb.GetSetting<bool>("BlockAutorun", true)
-                };
-
-                // Start Real-time Protection if enabled at startup
-                if (settings.StartupRealtimeProtection)
+                    Dispatcher.Invoke(() => (Application.Current as App)?.RunStartupUpdateCheck());
+                }
+                else
                 {
-                    _protection.Start();
-                    _processGuard.Start(); // catch fast droppers via Win32_ProcessStartTrace
-                    _monitorView?.RefreshUI();
-                    _logger.Information("Real-time protection started");
+                    _logger.Information("Startup update check skipped (disabled in settings)");
                 }
 
-                // Start Self-Protection if enabled at startup
+                // Self-protection has an async init, so it stays here rather than in the applier.
                 if (settings.StartupSelfProtection)
                 {
                     try
@@ -397,42 +403,186 @@ namespace SkidrowKiller
                         _logger.Warning(ex, "Self-protection initialization warning");
                     }
                 }
-
-                // Start Gaming Mode if enabled at startup
-                if (settings.StartupGamingMode)
-                {
-                    _gamingMode.AutoDetectEnabled = settings.AutoDetectGames;
-                    _gamingMode.SuppressNotifications = settings.SuppressGamingNotifications;
-                    _gamingMode.Start();
-                    _logger.Information("Gaming Mode service started");
-                }
-
-                // Start USB Protection if enabled at startup
-                if (settings.StartupUsbProtection)
-                {
-                    _usbScan.AutoScanEnabled = settings.AutoScanUsb;
-                    _usbScan.BlockAutorun = settings.BlockAutorun;
-                    _usbScan.Start();
-                    _logger.Information("USB Protection service started");
-                }
-
-                // Start Ransomware Protection if enabled at startup
-                if (settings.StartupRansomwareProtection)
-                {
-                    _ransomwareProtection.Start();
-                    _logger.Information("Ransomware Protection service started");
-                }
-
-                // Start Scheduled Scans if enabled at startup
-                if (settings.StartupScheduledScans)
-                {
-                    _scheduledScan.Start();
-                    _logger.Information("Scheduled Scan service started");
-                }
             }
             catch (Exception ex)
             {
                 _logger.Warning(ex, "Error initializing new services");
+            }
+        }
+
+        private void SettingsView_SettingsApplied(object? sender, Views.UserSettings settings)
+        {
+            try
+            {
+                ApplyUserSettings(settings, isStartup: false);
+                SetStatusBarMessage("Settings applied");
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to apply settings to running services");
+                SetStatusBarMessage($"Some settings could not be applied: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Push a settings snapshot into every running service.
+        /// <paramref name="isStartup"/> selects the Startup* flags (which decide whether a service runs
+        /// at all when the app launches); afterwards the live toggles are authoritative.
+        /// </summary>
+        private void ApplyUserSettings(Views.UserSettings settings, bool isStartup)
+        {
+            _showNotifications = settings.ShowNotifications;
+
+            // --- Logging ---
+            try
+            {
+                LoggingService.SetMinimumLevel(settings.GetLogLevel());
+                LoggingService.SetLoggingEnabled(settings.EnableLogging);
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying logging settings failed"); }
+
+            // --- Detection sensitivity ---
+            try { _analyzer.MinimumScoreToReport = settings.GetMinimumThreatScore(); }
+            catch (Exception ex) { _logger.Warning(ex, "Applying sensitivity failed"); }
+
+            // --- Backup retention / quota ---
+            try
+            {
+                _backupManager.RetentionDays = settings.GetBackupRetentionDays();
+                _backupManager.MaxBackupSizeMB = settings.GetMaxBackupSizeMB();
+                _backupManager.CleanOldBackups();
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying backup settings failed"); }
+
+            // --- Scanning ---
+            try
+            {
+                _scanner.ScanNetworkDrives = settings.ScanNetworkDrives;
+                _scanView?.ApplyUserSettings(settings);
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying scan settings failed"); }
+
+            // --- Real-time protection ---
+            try
+            {
+                _protection.ProcessMonitoringEnabled = settings.MonitorProcesses;
+                _protection.NetworkMonitoringEnabled = settings.MonitorNetwork;
+                _protection.FileMonitoringEnabled = true;
+                _protection.RegistryMonitoringEnabled = true;
+
+                var wantRealtime = isStartup
+                    ? settings.StartupRealtimeProtection && settings.RealtimeProtection
+                    : settings.RealtimeProtection;
+
+                SetServiceState(wantRealtime, _protection.IsRunning,
+                    () => { _protection.Start(); _processGuard.Start(); },
+                    () => { _protection.Stop(); _processGuard.Stop(); },
+                    "Real-time protection");
+
+                _monitorView?.RefreshUI();
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying real-time protection settings failed"); }
+
+            // NOTE: "Monitor network activity" deliberately controls only the passive layer above.
+            // Web protection is left to its own screen because starting it rewrites the system hosts
+            // file, which is far too big a side effect for a checkbox in a settings list.
+
+            // --- Gaming mode ---
+            try
+            {
+                _gamingMode.AutoDetectEnabled = settings.AutoDetectGames;
+                _gamingMode.SuppressNotifications = settings.SuppressGamingNotifications;
+
+                var wantGaming = isStartup
+                    ? settings.StartupGamingMode && settings.GamingModeEnabled
+                    : settings.GamingModeEnabled;
+
+                SetServiceState(wantGaming, _gamingMode.IsRunning,
+                    () => _gamingMode.Start(), () => _gamingMode.Stop(), "Gaming Mode");
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying gaming mode settings failed"); }
+
+            // --- USB protection ---
+            try
+            {
+                _usbScan.AutoScanEnabled = settings.AutoScanUsb;
+                _usbScan.BlockAutorun = settings.BlockAutorun;
+
+                // The Settings screen only offers a startup flag for USB (plus behaviour options),
+                // so a later save adjusts behaviour without yanking the watcher up or down.
+                if (isStartup)
+                {
+                    SetServiceState(settings.StartupUsbProtection, _usbScan.IsEnabled,
+                        () => _usbScan.Start(), () => _usbScan.Stop(), "USB protection");
+                }
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying USB settings failed"); }
+
+            // --- Ransomware protection ---
+            try
+            {
+                _ransomwareProtection.HoneypotFilesEnabled = settings.HoneypotFiles;
+
+                var wantRansomware = isStartup
+                    ? settings.StartupRansomwareProtection && settings.RansomwareProtection
+                    : settings.RansomwareProtection;
+
+                SetServiceState(wantRansomware, _ransomwareProtection.IsEnabled,
+                    () => _ransomwareProtection.Start(), () => _ransomwareProtection.Stop(),
+                    "Ransomware protection");
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying ransomware settings failed"); }
+
+            // --- Scheduled scans ---
+            try
+            {
+                var wantScheduled = isStartup
+                    ? settings.StartupScheduledScans || settings.ScheduledScansEnabled
+                    : settings.ScheduledScansEnabled;
+
+                SetServiceState(wantScheduled, _scheduledScan.IsRunning,
+                    () => _scheduledScan.Start(), () => _scheduledScan.Stop(), "Scheduled scans");
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying scheduled scan settings failed"); }
+
+            // --- Signature / threat-intel update cadence ---
+            try
+            {
+                var hours = settings.GetUpdateFrequencyHours();
+
+                _signatureUpdate.AutoUpdate = settings.AutoUpdateDatabase;
+                _signatureUpdate.UpdateInterval = TimeSpan.FromHours(hours);
+
+                if (settings.AutoUpdateDatabase)
+                {
+                    _signatureUpdate.StartAutoUpdate();
+                    _threatIntel.StartAutoUpdate(TimeSpan.FromHours(hours), _licenseService.GetCurrentTier());
+                }
+                else
+                {
+                    _signatureUpdate.StopAutoUpdate();
+                    _threatIntel.StopAutoUpdate();
+                }
+            }
+            catch (Exception ex) { _logger.Warning(ex, "Applying update settings failed"); }
+
+            _logger.Information("User settings applied to running services (startup={Startup})", isStartup);
+        }
+
+        /// <summary>Start or stop a service only when its desired state differs from the current one.</summary>
+        private void SetServiceState(bool wanted, bool running, Action start, Action stop, string name)
+        {
+            if (wanted == running) return;
+
+            if (wanted)
+            {
+                start();
+                _logger.Information("{Service} started", name);
+            }
+            else
+            {
+                stop();
+                _logger.Information("{Service} stopped", name);
             }
         }
 
@@ -448,8 +598,7 @@ namespace SkidrowKiller
                 ProtectionStatusText.Foreground = (Brush)FindResource("DangerBrush");
 
                 // Show notification badge
-                ThreatCountBadge.Visibility = Visibility.Visible;
-                ThreatCountText.Text = "!";
+                ShowThreatBadge(System.Threading.Interlocked.Increment(ref _sessionThreatCount));
             });
         }
 
@@ -523,11 +672,18 @@ namespace SkidrowKiller
             _statusBarTimer.Start();
         }
 
+        private int _statusBarTicks;
+
         private void StatusBarTimer_Tick(object? sender, EventArgs e)
         {
             UpdateStatusBarTime();
             // Update protection status every second to catch any changes
             UpdateAllProtectionStatus();
+
+            // Connectivity was previously sampled once at startup, so the indicator stayed frozen on
+            // whatever the state happened to be when the app launched. Re-check every 5 seconds.
+            if (++_statusBarTicks % 5 == 0)
+                UpdateStatusBarConnection();
         }
 
         private void UpdateStatusBarConnection()

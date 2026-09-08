@@ -24,6 +24,10 @@ namespace SkidrowKiller.Views
         private readonly double[] _registryHistory = new double[8];
         private int _historyIndex = 0;
 
+        // Baseline for the real CPU measurement (see UpdateStatsLoop).
+        private TimeSpan _lastCpuTime = TimeSpan.Zero;
+        private DateTime _lastCpuSample = DateTime.MinValue;
+
         public MonitorView(ProtectionService protection)
         {
             InitializeComponent();
@@ -182,6 +186,41 @@ namespace SkidrowKiller.Views
             _statsCts = null;
         }
 
+        /// <summary>
+        /// Percentage of one machine's total CPU capacity used by this process since the last call.
+        /// Returns 0 on the first sample (no baseline yet).
+        /// </summary>
+        private double SampleCpuPercent(Process process)
+        {
+            try
+            {
+                var now = DateTime.UtcNow;
+                var cpuTime = process.TotalProcessorTime;
+
+                if (_lastCpuSample == DateTime.MinValue)
+                {
+                    _lastCpuSample = now;
+                    _lastCpuTime = cpuTime;
+                    return 0;
+                }
+
+                var wallMs = (now - _lastCpuSample).TotalMilliseconds;
+                var cpuMs = (cpuTime - _lastCpuTime).TotalMilliseconds;
+
+                _lastCpuSample = now;
+                _lastCpuTime = cpuTime;
+
+                if (wallMs <= 0) return 0;
+
+                var percent = cpuMs / (wallMs * Environment.ProcessorCount) * 100.0;
+                return Math.Clamp(percent, 0, 100);
+            }
+            catch
+            {
+                return 0;
+            }
+        }
+
         private async Task UpdateStatsLoop(CancellationToken token)
         {
             var currentProcess = Process.GetCurrentProcess();
@@ -209,8 +248,10 @@ namespace SkidrowKiller.Views
                     currentProcess.Refresh();
                     var memoryMb = currentProcess.WorkingSet64 / 1024 / 1024;
 
-                    // Rough CPU estimate based on process activity
-                    var cpuEstimate = _protection.IsRunning ? Math.Min(5, processCount / 50.0) : 0;
+                    // Real CPU usage of this process: change in processor time over change in wall
+                    // clock, normalised by core count. The old value was processCount / 50 capped at
+                    // 5 - a number that had nothing to do with CPU at all.
+                    var cpuEstimate = SampleCpuPercent(currentProcess);
 
                     await Dispatcher.InvokeAsync(() =>
                     {
