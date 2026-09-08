@@ -25,10 +25,26 @@ namespace SkidrowKiller.Services
     /// </summary>
     public class LicenseService : IDisposable
     {
-        // Production API server
-        private const string API_BASE_URL = "https://xmanstudio.com/api/v1/license";
+        // Production API server. Configurable (License:ApiBaseUrl) so the product can be pointed at a
+        // reachable host without a rebuild - it used to be a hardcoded constant.
+        private static readonly string API_BASE_URL = ResolveApiBaseUrl();
+        private const string DEFAULT_API_BASE_URL = "https://xmanstudio.com/api/v1/license";
         private const string PRODUCT_ID = "skidrow-killer";
         private const string LICENSE_FILE = "license.dat";
+        private const string ORIGINAL_LICENSE_FILE = "license.original.dat";
+
+        private static string ResolveApiBaseUrl()
+        {
+            try
+            {
+                var configured = AppConfiguration.Settings.License.ApiBaseUrl;
+                if (!string.IsNullOrWhiteSpace(configured))
+                    return configured.TrimEnd('/');
+            }
+            catch { /* configuration unavailable */ }
+
+            return DEFAULT_API_BASE_URL;
+        }
         private const string CONNECTIVITY_FILE = "connectivity.dat";
         private const int OFFLINE_GRACE_PERIOD_HOURS = 168; // 7 days offline grace period (extended for pre-launch)
         private const int MAX_ACTIVATIONS = 3; // Max devices per license
@@ -38,6 +54,7 @@ namespace SkidrowKiller.Services
         private readonly ILogger _logger;
         private readonly SettingsDatabase? _db;
         private readonly string _licenseFilePath;
+        private readonly string _originalLicenseFilePath;
         private readonly string _connectivityFilePath;
         private readonly System.Timers.Timer _connectivityTimer;
 
@@ -72,6 +89,7 @@ namespace SkidrowKiller.Services
             );
             Directory.CreateDirectory(appData);
             _licenseFilePath = Path.Combine(appData, LICENSE_FILE);
+            _originalLicenseFilePath = Path.Combine(appData, ORIGINAL_LICENSE_FILE);
             _connectivityFilePath = Path.Combine(appData, CONNECTIVITY_FILE);
 
             // Load saved data
@@ -153,8 +171,22 @@ namespace SkidrowKiller.Services
             }
             catch (HttpRequestException ex)
             {
-                _logger.Error(ex, "Network error during license activation");
-                return new LicenseResult { Success = false, Message = "Network error. Please check your connection." };
+                _logger.Error(ex, "Could not reach the license server at {Url}", API_BASE_URL);
+                return new LicenseResult
+                {
+                    Success = false,
+                    Message = $"Could not reach the license server ({API_BASE_URL}). " +
+                              "Your key was not checked - this is a connection problem, not a rejected key."
+                };
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.Error(ex, "License activation timed out against {Url}", API_BASE_URL);
+                return new LicenseResult
+                {
+                    Success = false,
+                    Message = "The license server did not respond in time. Please try again later."
+                };
             }
             catch (Exception ex)
             {
@@ -250,6 +282,7 @@ namespace SkidrowKiller.Services
                 // Clear local license regardless of server response
                 _currentLicense = null;
                 DeleteLocalLicense();
+                DeleteOriginalLicense();
                 LicenseStatusChanged?.Invoke(this, LicenseStatus.NotActivated);
 
                 if (result?.Success == true)
@@ -338,7 +371,17 @@ namespace SkidrowKiller.Services
         public string GetPurchaseUrl()
         {
             var deviceId = GetDeviceId();
-            return $"https://xmanstudio.com/products/skidrow-killer?device_id={Uri.EscapeDataString(deviceId)}";
+
+            var baseUrl = "https://xmanstudio.com/products/skidrow-killer";
+            try
+            {
+                var configured = AppConfiguration.Settings.License.PurchaseUrl;
+                if (!string.IsNullOrWhiteSpace(configured)) baseUrl = configured;
+            }
+            catch { /* configuration unavailable */ }
+
+            var separator = baseUrl.Contains('?') ? "&" : "?";
+            return $"{baseUrl}{separator}device_id={Uri.EscapeDataString(deviceId)}";
         }
 
         #endregion
@@ -454,15 +497,33 @@ namespace SkidrowKiller.Services
                     _lastSuccessfulConnection = DateTime.Now;
                     SaveConnectivityData();
 
-                    // If was downgraded, try to restore
-                    if (_isOfflineDowngraded && _currentLicense != null && !_currentLicense.IsTrial)
+                    // If we were downgraded, put the REAL license back before validating. The old
+                    // code required !IsTrial, which is never true after a downgrade, so the restore
+                    // branch could not run at all - and it would have validated the synthetic key.
+                    if (_isOfflineDowngraded)
                     {
-                        _isOfflineDowngraded = false;
-                        var validateResult = await ValidateLicenseAsync();
-                        if (validateResult.Success)
+                        var original = LoadOriginalLicense();
+                        if (original != null)
                         {
-                            _logger.Information("License restored after reconnection");
-                            LicenseStatusChanged?.Invoke(this, LicenseStatus.Active);
+                            _currentLicense = original;
+                            _isOfflineDowngraded = false;
+
+                            var validateResult = await ValidateLicenseAsync();
+                            if (validateResult.Success)
+                            {
+                                DeleteOriginalLicense();
+                                SaveConnectivityData();
+                                _logger.Information("License restored after reconnection");
+                                LicenseStatusChanged?.Invoke(this, LicenseStatus.Active);
+                            }
+                            else
+                            {
+                                _logger.Warning("Restored license failed server validation: {Message}", validateResult.Message);
+                            }
+                        }
+                        else
+                        {
+                            _isOfflineDowngraded = false;
                         }
                     }
 
@@ -510,29 +571,80 @@ namespace SkidrowKiller.Services
         {
             if (_isOfflineDowngraded) return; // Already downgraded
 
+            var originalLicense = _currentLicense;
+            if (originalLicense == null) return;
+
             _logger.Warning("License downgraded to trial due to extended offline period");
 
             _isOfflineDowngraded = true;
 
-            // Store original license info for restoration
-            var originalLicense = _currentLicense;
+            // Persist the REAL license before replacing the in-memory one. Previously the original
+            // was only held in a local variable and SaveLocalLicense() overwrote license.dat with the
+            // synthetic OFFLINE-TRIAL key, so a paid key was destroyed for good after 7 days offline
+            // (and reconnecting then "validated" the fake key instead of the real one).
+            SaveOriginalLicense(originalLicense);
 
-            // Create trial license
             _currentLicense = new LicenseInfo
             {
-                LicenseKey = $"OFFLINE-TRIAL-{originalLicense?.LicenseKey?[..8] ?? "XXXX"}",
+                LicenseKey = $"OFFLINE-TRIAL-{Mask(originalLicense.LicenseKey)}",
                 MachineId = GetMachineId(),
                 ExpiresAt = DateTime.Now.AddDays(TRIAL_DAYS),
                 ActivatedAt = DateTime.Now,
                 IsTrial = true,
                 IsValid = true,
                 Features = new[] { "basic_scan", "real_time_protection" }, // Limited features
-                Email = originalLicense?.Email,
-                CustomerName = originalLicense?.CustomerName
+                Email = originalLicense.Email,
+                CustomerName = originalLicense.CustomerName
             };
 
             SaveLocalLicense();
             LicenseStatusChanged?.Invoke(this, LicenseStatus.Trial);
+        }
+
+        private static string Mask(string? key)
+        {
+            if (string.IsNullOrEmpty(key)) return "XXXX";
+            return key.Length <= 8 ? key : key[..8];
+        }
+
+        /// <summary>Keep the paid license aside while an offline downgrade is in effect.</summary>
+        private void SaveOriginalLicense(LicenseInfo license)
+        {
+            try
+            {
+                var json = JsonSerializer.Serialize(license);
+                File.WriteAllBytes(_originalLicenseFilePath, EncryptData(json));
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to preserve the original license during downgrade");
+            }
+        }
+
+        /// <summary>Read back the license stashed by <see cref="SaveOriginalLicense"/>, if any.</summary>
+        private LicenseInfo? LoadOriginalLicense()
+        {
+            try
+            {
+                if (!File.Exists(_originalLicenseFilePath)) return null;
+                var json = DecryptData(File.ReadAllBytes(_originalLicenseFilePath));
+                return JsonSerializer.Deserialize<LicenseInfo>(json);
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Failed to read the preserved original license");
+                return null;
+            }
+        }
+
+        private void DeleteOriginalLicense()
+        {
+            try
+            {
+                if (File.Exists(_originalLicenseFilePath))
+                    File.Delete(_originalLicenseFilePath);
+            }
+            catch { }
         }
 
         /// <summary>

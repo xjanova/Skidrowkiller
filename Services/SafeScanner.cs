@@ -14,6 +14,7 @@ namespace SkidrowKiller.Services
         private readonly ThreatAnalyzer _analyzer;
         private readonly WhitelistManager _whitelist;
         private readonly BackupManager _backup;
+        private readonly ThreatEradicator _eradicator;
         private readonly ILogger _logger;
         private CancellationTokenSource? _cts;
         private int _scanGate; // 0 = idle, 1 = a scan is running (re-entrancy guard)
@@ -29,6 +30,17 @@ namespace SkidrowKiller.Services
 
         public bool IsPaused => _isPaused;
         public bool IsScanning => _cts != null && !_cts.IsCancellationRequested;
+
+        /// <summary>
+        /// Include network drives in a full-drive scan (Settings -> Scanning -> Scan network drives).
+        /// Off by default because network scans are slow and often not the user's machine.
+        /// </summary>
+        public bool ScanNetworkDrives { get; set; }
+
+        /// <summary>
+        /// Hard stop for a single scan, from Scanning:ScanTimeoutMinutes. 0 disables the timeout.
+        /// </summary>
+        public int ScanTimeoutMinutes { get; set; }
 
         // Pre-scan counting
         private long _totalFilesToScan;
@@ -58,13 +70,21 @@ namespace SkidrowKiller.Services
         private const uint PROCESS_QUERY_INFORMATION = 0x0400;
         private const uint PROCESS_VM_READ = 0x0010;
 
-        public SafeScanner(ThreatAnalyzer analyzer, WhitelistManager whitelist, BackupManager backup)
+        public SafeScanner(ThreatAnalyzer analyzer, WhitelistManager whitelist, BackupManager backup,
+            QuarantineService? quarantine = null)
         {
             _analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
             _whitelist = whitelist ?? throw new ArgumentNullException(nameof(whitelist));
             _backup = backup ?? throw new ArgumentNullException(nameof(backup));
             _logger = LoggingService.ForContext<SafeScanner>();
             _backup.LogAdded += (s, msg) => RaiseLog(msg);
+
+            _eradicator = new ThreatEradicator(_backup, quarantine, _analyzer, _whitelist);
+            _eradicator.LogAdded += (s, msg) => RaiseLog(msg);
+
+            // Scanning:ScanTimeoutMinutes used to be read by nothing, so a wedged scan ran forever.
+            try { ScanTimeoutMinutes = AppConfiguration.Settings.Scanning.ScanTimeoutMinutes; }
+            catch { ScanTimeoutMinutes = 60; }
         }
 
         public async Task<ScanResult> ScanAsync(bool scanFiles, bool scanRegistry, bool scanProcesses,
@@ -85,6 +105,16 @@ namespace SkidrowKiller.Services
             // Replace and dispose any previous token source (defensive; the gate already serializes this).
             var previousCts = Interlocked.Exchange(ref _cts, new CancellationTokenSource());
             previousCts?.Dispose();
+
+            // Scanning:ScanTimeoutMinutes is a real stop now: a scan wedged on an unresponsive
+            // network path or a pathological directory tree used to run until the app was killed.
+            DateTime? deadline = null;
+            if (ScanTimeoutMinutes > 0)
+            {
+                deadline = DateTime.UtcNow.AddMinutes(ScanTimeoutMinutes);
+                _cts!.CancelAfter(TimeSpan.FromMinutes(ScanTimeoutMinutes));
+            }
+
             var token = _cts!.Token;
             var startTime = DateTime.Now;
 
@@ -190,7 +220,12 @@ namespace SkidrowKiller.Services
             }
             catch (OperationCanceledException)
             {
-                RaiseLog("\n⚠️ [CANCELLED] Scan stopped by user");
+                // Distinguish "the user pressed Stop" from "the configured timeout expired" - saying
+                // "stopped by user" for a timeout hides a real problem (e.g. an unresponsive path).
+                if (deadline.HasValue && DateTime.UtcNow >= deadline.Value)
+                    RaiseLog($"\n⏱️ [TIMEOUT] Scan stopped after the configured {ScanTimeoutMinutes} minute limit");
+                else
+                    RaiseLog("\n⚠️ [CANCELLED] Scan stopped by user");
             }
             catch (Exception ex)
             {
@@ -295,11 +330,40 @@ namespace SkidrowKiller.Services
                 return _selectedDrives;
             }
 
-            // Default: all fixed and removable drives
+            // Honour Scanning:ExcludedDriveTypes (previously dead config) and the
+            // "Scan network drives" setting instead of hardcoding Fixed|Removable.
+            var excluded = GetExcludedDriveTypes();
+
             return DriveInfo.GetDrives()
-                .Where(d => d.IsReady && (d.DriveType == DriveType.Fixed || d.DriveType == DriveType.Removable))
+                .Where(d => d.IsReady)
+                .Where(d => !excluded.Contains(d.DriveType))
+                .Where(d => ScanNetworkDrives || d.DriveType != DriveType.Network)
                 .Select(d => d.RootDirectory.FullName)
                 .ToList();
+        }
+
+        private HashSet<DriveType> GetExcludedDriveTypes()
+        {
+            var excluded = new HashSet<DriveType>();
+
+            try
+            {
+                foreach (var name in AppConfiguration.Settings.Scanning.ExcludedDriveTypes)
+                {
+                    if (Enum.TryParse<DriveType>(name, ignoreCase: true, out var type))
+                        excluded.Add(type);
+                }
+            }
+            catch
+            {
+                excluded.Add(DriveType.Network);
+                excluded.Add(DriveType.CDRom);
+            }
+
+            // The explicit setting wins over the config file for network drives.
+            if (ScanNetworkDrives) excluded.Remove(DriveType.Network);
+
+            return excluded;
         }
 
         private static List<string> GetQuickScanPaths(string drive)
@@ -421,7 +485,7 @@ namespace SkidrowKiller.Services
                     if (Directory.Exists(folder))
                     {
                         RaiseLog($"   📁 {folder}");
-                        await Task.Run(() => ScanDirectory(folder, result, token), token);
+                        await Task.Run(() => ScanDirectoryAsync(folder, result, token), token);
                     }
                     else
                     {
@@ -446,7 +510,7 @@ namespace SkidrowKiller.Services
                         if (Directory.Exists(path))
                         {
                             RaiseLog($"   📁 {path}");
-                            await Task.Run(() => ScanDirectory(path, result, token, maxDepth: 3), token);
+                            await Task.Run(() => ScanDirectoryAsync(path, result, token, maxDepth: 3), token);
                         }
                     }
                 }
@@ -458,12 +522,25 @@ namespace SkidrowKiller.Services
                 {
                     if (token.IsCancellationRequested) break;
                     RaiseLog($"   📁 Scanning drive: {drive}");
-                    await Task.Run(() => ScanDirectory(drive, result, token), token);
+                    await Task.Run(() => ScanDirectoryAsync(drive, result, token), token);
                 }
             }
         }
 
-        private void ScanDirectory(string path, ScanResult result, CancellationToken token, int maxDepth = -1, int currentDepth = 0)
+        /// <summary>
+        /// Extensions that earn the full detection stack (PE/imphash, heuristics, behavioural APIs,
+        /// entropy, cloud). Everything else still gets hash + content signatures + YARA + ADS.
+        /// </summary>
+        private static readonly HashSet<string> DeepInspectExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".dll", ".sys", ".scr", ".ocx", ".cpl", ".drv", ".efi",
+            ".com", ".pif", ".msi", ".msp", ".jar",
+            ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse",
+            ".wsf", ".wsh", ".hta", ".lnk", ".reg"
+        };
+
+        private async Task ScanDirectoryAsync(string path, ScanResult result, CancellationToken token,
+            int maxDepth = -1, int currentDepth = 0)
         {
             try
             {
@@ -471,7 +548,7 @@ namespace SkidrowKiller.Services
                 if (token.IsCancellationRequested) return;
                 if (maxDepth != -1 && currentDepth > maxDepth) return;
 
-                // Analyze directory itself
+                // Analyze directory itself (name/path only - a directory has no content to hash)
                 var dirThreat = _analyzer.AnalyzePath(path);
                 if (dirThreat != null)
                 {
@@ -491,13 +568,31 @@ namespace SkidrowKiller.Services
                     result.TotalScanned++;
                     _sectionScanned++;
 
-                    // Report progress every 100 files for smoother UI
-                    if (result.TotalScanned % 100 == 0)
+                    // Report progress on the configured cadence. It used to fire every 100 FILES,
+                    // which is either a flood (small files) or a stall (large ones), and it ignored
+                    // Scanning:ProgressUpdateIntervalMs entirely.
+                    RaiseProgressThrottled(file, result);
+
+                    // Content-based analysis. This used to be _analyzer.AnalyzePath(file), which looks
+                    // only at the file NAME and path - so the downloaded hash database, the YARA rules
+                    // and every PE/entropy/behavioural layer were never consulted by a scan, and any
+                    // real malware sitting under an innocuous filename went completely undetected.
+                    var depth = DeepInspectExtensions.Contains(Path.GetExtension(file))
+                        ? DetectionDepth.Full
+                        : DetectionDepth.Signature;
+
+                    ThreatInfo? threat;
+                    try
                     {
-                        RaiseProgress(file, result);
+                        threat = await _analyzer.AnalyzeFileAsync(file, depth, token);
+                    }
+                    catch (OperationCanceledException) { return; }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug(ex, "Analysis failed for {Path}", file);
+                        continue;
                     }
 
-                    var threat = _analyzer.AnalyzePath(file);
                     if (threat != null)
                     {
                         result.Threats.Add(threat);
@@ -512,11 +607,39 @@ namespace SkidrowKiller.Services
                 foreach (var dir in Directory.GetDirectories(path))
                 {
                     if (token.IsCancellationRequested) return;
-                    ScanDirectory(dir, result, token, maxDepth, currentDepth + 1);
+                    await ScanDirectoryAsync(dir, result, token, maxDepth, currentDepth + 1);
                 }
             }
             catch (UnauthorizedAccessException) { }
+            catch (OperationCanceledException) { }
             catch (Exception) { }
+        }
+
+        private static readonly TimeSpan _progressInterval = ResolveProgressInterval();
+        private long _lastProgressTicks;
+
+        private static TimeSpan ResolveProgressInterval()
+        {
+            try
+            {
+                var ms = AppConfiguration.Settings.Scanning.ProgressUpdateIntervalMs;
+                if (ms > 0) return TimeSpan.FromMilliseconds(Math.Clamp(ms, 16, 5000));
+            }
+            catch { /* configuration unavailable */ }
+
+            return TimeSpan.FromMilliseconds(100);
+        }
+
+        /// <summary>Emit a progress update at most once per configured interval.</summary>
+        private void RaiseProgressThrottled(string currentItem, ScanResult result)
+        {
+            var now = DateTime.UtcNow.Ticks;
+            var last = Interlocked.Read(ref _lastProgressTicks);
+
+            if (now - last < _progressInterval.Ticks) return;
+            if (Interlocked.CompareExchange(ref _lastProgressTicks, now, last) != last) return;
+
+            RaiseProgress(currentItem, result);
         }
 
         private void RaiseProgress(string currentItem, ScanResult result)
@@ -675,6 +798,30 @@ namespace SkidrowKiller.Services
                             RaiseLog($"   Suspicious DLLs: {string.Join(", ", loadedDlls.Select(Path.GetFileName))}");
                         }
                     }
+                    else if (!string.IsNullOrEmpty(execPath))
+                    {
+                        // AnalyzeProcess only matches on the process NAME and path. Also inspect the
+                        // backing executable's CONTENT, otherwise known malware running as, say,
+                        // "updater.exe" was invisible to a process scan.
+                        ThreatInfo? fileThreat = null;
+                        try { fileThreat = await _analyzer.AnalyzeFileAsync(execPath, DetectionDepth.Full, token); }
+                        catch (OperationCanceledException) { break; }
+                        catch (Exception ex) { _logger.Debug(ex, "Process image analysis failed for {Path}", execPath); }
+
+                        if (fileThreat != null)
+                        {
+                            fileThreat.Type = ThreatType.Process;
+                            fileThreat.ProcessId = process.Id;
+                            fileThreat.Name = process.ProcessName;
+
+                            result.Threats.Add(fileThreat);
+                            result.ThreatsFound++;
+                            ThreatFound?.Invoke(this, fileThreat);
+                            RaiseLog($"🔴 [PROCESS] {fileThreat.SeverityDisplay}: {process.ProcessName} (PID: {process.Id})");
+                            RaiseLog($"   Image: {execPath}");
+                            RaiseLog($"   Score: {fileThreat.Score} | Patterns: {string.Join(", ", fileThreat.MatchedPatterns)}");
+                        }
+                    }
                 }
                 catch { }
                 finally
@@ -754,27 +901,52 @@ namespace SkidrowKiller.Services
             return result.Count > 0 ? result : null;
         }
 
+        /// <summary>
+        /// Remove a threat. Returns true only when the threat is actually gone - not when a delete
+        /// silently failed (the old behaviour logged "securely wiped" for a still-present file) and
+        /// not when removal had to be deferred to reboot. <see cref="ThreatInfo.RemovalNote"/>
+        /// carries the detail either way.
+        /// </summary>
         public async Task<bool> RemoveThreatAsync(ThreatInfo threat, bool backup = true)
+        {
+            switch (threat.Type)
+            {
+                case ThreatType.File:
+                case ThreatType.Process:
+                case ThreatType.DllInjection:
+                case ThreatType.NetworkConnection:
+                    // Kill every process running the image, strip the persistence that would bring it
+                    // back, then wipe (or defer to reboot) - and say which of those actually happened.
+                    var outcome = await EradicateAsync(threat, backup, EradicationMode.Delete);
+                    return outcome.Succeeded;
+
+                case ThreatType.Directory:
+                    return RemoveDirectory(threat, backup);
+
+                case ThreatType.Registry:
+                    return DeleteRegistryEntry(threat.Path);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Full-footprint removal with a detailed outcome. Used directly by the real-time responder and
+        /// by the scan screen's quarantine policy so a running sample is killed before its file moves.
+        /// </summary>
+        public Task<EradicationResult> EradicateAsync(ThreatInfo threat, bool backup, EradicationMode mode,
+            CancellationToken cancellationToken = default)
+            => _eradicator.EradicateAsync(threat, backup, mode, cancellationToken);
+
+        private bool RemoveDirectory(ThreatInfo threat, bool backup)
         {
             try
             {
-                // Backup first if requested
+                if (!Directory.Exists(threat.Path)) return false;
+
                 if (backup)
                 {
-                    string? backupId = null;
-                    switch (threat.Type)
-                    {
-                        case ThreatType.File:
-                            backupId = _backup.BackupFile(threat.Path);
-                            break;
-                        case ThreatType.Directory:
-                            backupId = _backup.BackupDirectory(threat.Path);
-                            break;
-                        case ThreatType.Registry:
-                            // Registry backup handled separately
-                            break;
-                    }
-
+                    var backupId = _backup.BackupDirectory(threat.Path);
                     if (backupId != null)
                     {
                         threat.IsBackedUp = true;
@@ -782,51 +954,18 @@ namespace SkidrowKiller.Services
                     }
                 }
 
-                // Remove threat
-                switch (threat.Type)
-                {
-                    case ThreatType.File:
-                        if (File.Exists(threat.Path))
-                        {
-                            // Overwrite the bytes before deleting so the payload can't be carved back from disk
-                            // (a backup copy was already made above if requested).
-                            SecureDelete(threat.Path);
-                            RaiseLog($"✅ [REMOVED] File (securely wiped): {threat.Path}");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Directory:
-                        if (Directory.Exists(threat.Path))
-                        {
-                            Directory.Delete(threat.Path, true);
-                            RaiseLog($"✅ [REMOVED] Directory: {threat.Path}");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Process:
-                        if (threat.ProcessId.HasValue)
-                        {
-                            var proc = Process.GetProcessById(threat.ProcessId.Value);
-                            proc.Kill(true);
-                            proc.WaitForExit(5000);
-                            RaiseLog($"✅ [KILLED] Process: {threat.Name} (PID: {threat.ProcessId})");
-                            return true;
-                        }
-                        break;
-
-                    case ThreatType.Registry:
-                        // Parse and delete registry entry
-                        return DeleteRegistryEntry(threat.Path);
-                }
+                Directory.Delete(threat.Path, true);
+                var gone = !Directory.Exists(threat.Path);
+                threat.RemovalNote = gone ? "directory removed" : "directory could not be removed";
+                RaiseLog(gone ? $"✅ [REMOVED] Directory: {threat.Path}" : $"❌ [FAILED] Directory still present: {threat.Path}");
+                return gone;
             }
             catch (Exception ex)
             {
+                threat.RemovalNote = ex.Message;
                 RaiseLog($"❌ [ERROR] Failed to remove {threat.Path}: {ex.Message}");
+                return false;
             }
-
-            return false;
         }
 
         private bool DeleteRegistryEntry(string fullPath)
@@ -894,36 +1033,6 @@ namespace SkidrowKiller.Services
         /// malware cannot be recovered by file-carving. Overwrites up to 100 MB (enough to destroy the PE
         /// headers/body of any real sample) then deletes. Falls back to a plain delete if the file is locked.
         /// </summary>
-        private void SecureDelete(string path)
-        {
-            try
-            {
-                File.SetAttributes(path, FileAttributes.Normal);
-                var length = new FileInfo(path).Length;
-                if (length > 0)
-                {
-                    var toWipe = Math.Min(length, 100L * 1024 * 1024);
-                    using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
-                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.None);
-                    var buffer = new byte[64 * 1024];
-                    long written = 0;
-                    while (written < toWipe)
-                    {
-                        rng.GetBytes(buffer);
-                        var n = (int)Math.Min(buffer.Length, toWipe - written);
-                        fs.Write(buffer, 0, n);
-                        written += n;
-                    }
-                    fs.Flush(true);
-                }
-                File.Delete(path);
-            }
-            catch
-            {
-                try { File.Delete(path); } catch { /* locked/in-use — leave to quarantine/next boot */ }
-            }
-        }
-
         private void RaiseLog(string message)
         {
             LogAdded?.Invoke(this, message);

@@ -17,6 +17,19 @@ namespace SkidrowKiller.Services
         public ThreatAnalysisSettings ThreatAnalysis { get; set; } = new();
         public ThreatIntelSettings ThreatIntel { get; set; } = new();
         public DefenderSettings Defender { get; set; } = new();
+        public LicenseSettings License { get; set; } = new();
+    }
+
+    public class LicenseSettings
+    {
+        /// <summary>
+        /// Base URL of the licensing API. Empty falls back to the built-in default. Configurable so
+        /// the endpoint can be moved without a rebuild.
+        /// </summary>
+        public string ApiBaseUrl { get; set; } = "";
+
+        /// <summary>Where the "Buy"/"Upgrade" buttons send the user. The device id is appended.</summary>
+        public string PurchaseUrl { get; set; } = "https://xmanstudio.com/products/skidrow-killer";
     }
 
     public class DefenderSettings
@@ -36,7 +49,9 @@ namespace SkidrowKiller.Services
 
     public class ScanningSettings
     {
-        public int MaxConcurrentScans { get; set; } = 1;
+        // NOTE: there is deliberately no MaxConcurrentScans setting. SafeScanner serialises scans
+        // behind a re-entrancy gate (shared progress state cannot be shared safely), so a knob for
+        // it would have been configuration that does nothing.
         public int ScanTimeoutMinutes { get; set; } = 60;
         public bool EnableFileScan { get; set; } = true;
         public bool EnableRegistryScan { get; set; } = true;

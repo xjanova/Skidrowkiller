@@ -173,17 +173,20 @@ namespace SkidrowKiller.Views
             if (result != MessageBoxResult.Yes) return;
 
             var removed = await _scanner.RemoveThreatAsync(threat, backup: true);
+            var detail = string.IsNullOrEmpty(threat.RemovalNote) ? "" : $"\n\n{threat.RemovalNote}";
             if (removed)
             {
                 _threats.Remove(threat);
                 RefreshThreats();
-                MessageBox.Show("Threat removed successfully!", "Success",
+                MessageBox.Show($"Threat removed.{detail}", "Success",
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
             else
             {
-                MessageBox.Show("Failed to remove threat.", "Error",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                // "Failed" is not the whole story when the process is dead and the file is queued
+                // for deletion at reboot - show what actually happened.
+                MessageBox.Show($"Threat not fully removed.{detail}", "Removal Incomplete",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
 

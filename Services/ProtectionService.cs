@@ -40,7 +40,24 @@ namespace SkidrowKiller.Services
         private readonly List<FileSystemWatcher> _fileWatchers = new();
         private readonly HashSet<string> _alertedConnections = new();
         private ProtectionStatus _currentStatus = ProtectionStatus.Safe;
+        private DateTime _lastWarningAt = DateTime.MinValue;
         private int _alertCount;
+
+        private static readonly TimeSpan _monitorInterval =
+            TimeSpan.FromSeconds(Math.Clamp(SafeProtectionSetting(s => s.MonitorIntervalSeconds, 2), 1, 60));
+
+        private static readonly TimeSpan _autoResetAfter =
+            TimeSpan.FromSeconds(Math.Clamp(SafeProtectionSetting(s => s.AutoResetStatusSeconds, 30), 5, 600));
+
+        private static int SafeProtectionSetting(Func<ProtectionSettings, int> selector, int fallback)
+        {
+            try
+            {
+                var value = selector(AppConfiguration.Settings.Protection);
+                return value > 0 ? value : fallback;
+            }
+            catch { return fallback; }
+        }
 
         // Real stats
         private int _processesScanned;
@@ -48,6 +65,7 @@ namespace SkidrowKiller.Services
         private int _networkConnections;
         private int _registryKeysChecked;
         private int _blockedThreats;
+        private int _threatsDetected;
 
         public event EventHandler<ProtectionAlert>? AlertRaised;
         public event EventHandler<ProtectionStatus>? StatusChanged;
@@ -57,17 +75,71 @@ namespace SkidrowKiller.Services
         public ProtectionStatus CurrentStatus => _currentStatus;
         public int AlertCount => _alertCount;
 
+        // Per-layer switches driven by Settings -> Real-time Protection. Changing one takes effect on
+        // the next monitor tick; file watchers are (re)built when the flag flips while running.
+        public bool ProcessMonitoringEnabled { get; set; } = true;
+        public bool NetworkMonitoringEnabled { get; set; } = true;
+        public bool RegistryMonitoringEnabled { get; set; } = true;
+
+        /// <summary>
+        /// Back off while a game is in the foreground: poll less often and skip the registry sweep.
+        /// Drives Gaming Mode's "Reduce scan intensity" option, which previously changed nothing.
+        /// </summary>
+        public bool LowIntensityMode { get; set; }
+
+        private bool _fileMonitoringEnabled = true;
+        public bool FileMonitoringEnabled
+        {
+            get => _fileMonitoringEnabled;
+            set
+            {
+                if (_fileMonitoringEnabled == value) return;
+                _fileMonitoringEnabled = value;
+                if (!IsRunning) return;
+
+                if (value) SetupFileSystemWatchers();
+                else DisposeFileWatchers();
+            }
+        }
+
         // Real stats properties
         public int ProcessesScanned => _processesScanned;
         public int FilesWatched => _filesWatched;
         public int NetworkConnections => _networkConnections;
         public int RegistryKeysChecked => _registryKeysChecked;
+
+        /// <summary>Threats this service has flagged. Flagging is not blocking.</summary>
+        public int ThreatsDetected => _threatsDetected;
+
+        /// <summary>
+        /// Threats that were actually neutralised in response to an alert. This used to be bumped on
+        /// every detection while nothing in this class ever killed, quarantined or deleted anything -
+        /// it is now only incremented by <see cref="ReportBlocked"/> from whoever really acted.
+        /// </summary>
         public int BlockedThreats => _blockedThreats;
 
-        private readonly int[] _suspiciousPorts = {
-            4444, 5555, 6666, 7777, 8888, 9999, 31337, 12345, 65535,
-            1337, 4443, 8443, 6667, 6668, 6669, 1080, 9050
-        };
+        public void ReportBlocked() => Interlocked.Increment(ref _blockedThreats);
+
+        // Base list plus whatever Protection:SuspiciousPorts adds in appsettings.json (that key used to be dead).
+        private readonly HashSet<int> _suspiciousPorts = BuildSuspiciousPorts();
+
+        private static HashSet<int> BuildSuspiciousPorts()
+        {
+            var ports = new HashSet<int>
+            {
+                4444, 5555, 6666, 7777, 8888, 9999, 31337, 12345, 65535,
+                1337, 4443, 8443, 6667, 6668, 6669, 1080, 9050
+            };
+
+            try
+            {
+                foreach (var p in AppConfiguration.Settings.Protection.SuspiciousPorts)
+                    ports.Add(p);
+            }
+            catch { /* configuration unavailable - defaults are enough */ }
+
+            return ports;
+        }
 
         private readonly string[] _monitoredExtensions = {
             ".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".js",
@@ -97,17 +169,20 @@ namespace SkidrowKiller.Services
             _networkConnections = 0;
             _registryKeysChecked = 0;
             _blockedThreats = 0;
+            _threatsDetected = 0;
             _alertedConnections.Clear();
 
             InitializeKnownProcesses();
-            SetupFileSystemWatchers();
+            if (FileMonitoringEnabled) SetupFileSystemWatchers();
             _monitorTask = Task.Run(() => MonitorLoop(_cts.Token));
 
+            static string State(bool on) => on ? "Active" : "Disabled in settings";
+
             RaiseLog("🛡️ [PROTECTION] Real-time monitoring started");
-            RaiseLog("   ├─ Process monitoring: Active");
-            RaiseLog("   ├─ File system monitoring: Active");
-            RaiseLog("   ├─ Network monitoring: Active");
-            RaiseLog("   └─ Registry monitoring: Active");
+            RaiseLog($"   ├─ Process monitoring: {State(ProcessMonitoringEnabled)}");
+            RaiseLog($"   ├─ File system monitoring: {State(FileMonitoringEnabled)}");
+            RaiseLog($"   ├─ Network monitoring: {State(NetworkMonitoringEnabled)}");
+            RaiseLog($"   └─ Registry monitoring: {State(RegistryMonitoringEnabled)}");
             UpdateStatus(ProtectionStatus.Safe);
         }
 
@@ -118,19 +193,30 @@ namespace SkidrowKiller.Services
             _cts?.Cancel();
             IsRunning = false;
 
-            // Cleanup file watchers
-            foreach (var watcher in _fileWatchers)
-            {
-                watcher.EnableRaisingEvents = false;
-                watcher.Dispose();
-            }
-            _fileWatchers.Clear();
+            DisposeFileWatchers();
 
             RaiseLog("🛡️ [PROTECTION] Real-time monitoring stopped");
             RaiseLog($"   📊 Session: {_processesScanned} processes, {_filesWatched} files, {_blockedThreats} blocked");
         }
 
         #region File System Monitoring
+
+        private void DisposeFileWatchers()
+        {
+            lock (_fileWatchers)
+            {
+                foreach (var watcher in _fileWatchers)
+                {
+                    try
+                    {
+                        watcher.EnableRaisingEvents = false;
+                        watcher.Dispose();
+                    }
+                    catch { /* already torn down */ }
+                }
+                _fileWatchers.Clear();
+            }
+        }
 
         private void SetupFileSystemWatchers()
         {
@@ -210,11 +296,14 @@ namespace SkidrowKiller.Services
                 // Wait for file to be fully written
                 await Task.Delay(500);
 
-                var threat = _analyzer.AnalyzePath(filePath);
+                // Content analysis, not just the filename. Real-time protection used to call
+                // AnalyzePath, which never consults the hash database, the YARA rules or the PE
+                // layers - so a dropper landing in Downloads under a harmless name was ignored.
+                var threat = await _analyzer.AnalyzeFileAsync(filePath, DetectionDepth.Full);
                 if (threat != null && threat.Severity >= ThreatSeverity.Medium)
                 {
                     _alertCount++;
-                    _blockedThreats++;
+                    _threatsDetected++;
 
                     var alert = new ProtectionAlert
                     {
@@ -258,28 +347,27 @@ namespace SkidrowKiller.Services
             {
                 try
                 {
-                    await Task.Delay(2000, token); // Check every 2 seconds
+                    // Low-intensity mode stretches the poll interval fourfold instead of stopping.
+                    await Task.Delay(LowIntensityMode ? _monitorInterval * 4 : _monitorInterval, token);
 
-                    // Monitor new processes
-                    await MonitorNewProcesses(token);
+                    if (ProcessMonitoringEnabled)
+                        await MonitorNewProcesses(token);
 
-                    // Monitor network connections
-                    await MonitorNetwork(token);
+                    if (NetworkMonitoringEnabled)
+                        await MonitorNetwork(token);
 
-                    // Monitor registry (less frequently)
-                    if (_processesScanned % 5 == 0)
+                    // Monitor registry (less frequently, and not at all while backing off)
+                    if (RegistryMonitoringEnabled && !LowIntensityMode && _processesScanned % 5 == 0)
                     {
                         await MonitorRegistry(token);
                     }
 
-                    // Auto-reset status after a period of no threats
-                    if (_currentStatus == ProtectionStatus.Warning)
+                    // Auto-reset status once the warning has aged out. This used to `await Task.Delay(30000)`
+                    // inline, which stalled ALL monitoring for 30s after every single warning.
+                    if (_currentStatus == ProtectionStatus.Warning &&
+                        DateTime.UtcNow - _lastWarningAt >= _autoResetAfter)
                     {
-                        await Task.Delay(30000, token);
-                        if (_currentStatus == ProtectionStatus.Warning)
-                        {
-                            UpdateStatus(ProtectionStatus.Safe);
-                        }
+                        UpdateStatus(ProtectionStatus.Safe);
                     }
                 }
                 catch (OperationCanceledException)
@@ -382,7 +470,7 @@ namespace SkidrowKiller.Services
                 if (threat != null)
                 {
                     _alertCount++;
-                    _blockedThreats++;
+                    _threatsDetected++;
 
                     var alert = new ProtectionAlert
                     {
@@ -534,6 +622,11 @@ namespace SkidrowKiller.Services
 
         private void UpdateStatus(ProtectionStatus status)
         {
+            // Refresh the timestamp on every warning (even a repeat) so the auto-reset window
+            // measures time since the LAST alert, not since the first one.
+            if (status == ProtectionStatus.Warning || status == ProtectionStatus.Critical)
+                _lastWarningAt = DateTime.UtcNow;
+
             if (_currentStatus != status)
             {
                 _currentStatus = status;

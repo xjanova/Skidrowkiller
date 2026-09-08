@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Windows;
 using System.Windows.Threading;
 using SkidrowKiller.Services;
@@ -10,6 +11,17 @@ namespace SkidrowKiller
     {
         private UpdateService? _updateService;
 
+        /// <summary>
+        /// Command line the process was started with. WPF's StartupEventArgs is empty here because
+        /// Program.Main owns the entry point, so the args are handed over explicitly.
+        /// </summary>
+        public static string[] StartupArgs { get; set; } = Array.Empty<string>();
+
+        /// <summary>True when launched with --minimized (the Run key adds it for "Start minimized").</summary>
+        public static bool StartMinimizedRequested =>
+            StartupArgs.Any(a => a.Equals("--minimized", StringComparison.OrdinalIgnoreCase)
+                              || a.Equals("/minimized", StringComparison.OrdinalIgnoreCase));
+
         protected override void OnStartup(StartupEventArgs e)
         {
             base.OnStartup(e);
@@ -17,15 +29,28 @@ namespace SkidrowKiller
             // Handle WPF dispatcher unhandled exceptions
             DispatcherUnhandledException += App_DispatcherUnhandledException;
 
-            // Initialize update service and check for updates
+            // The update service is created here but the check is NOT fired blindly any more - it is
+            // started by MainWindow once the user's "Check for updates on startup" setting is known.
             _updateService = new UpdateService();
-            CheckForUpdatesAsync();
 
             var mainWindow = new MainWindow();
+
+            if (StartMinimizedRequested)
+            {
+                mainWindow.WindowState = WindowState.Minimized;
+                Log.Information("Starting minimized (--minimized)");
+            }
+
             mainWindow.Show();
 
             Log.Information("Main window initialized");
         }
+
+        /// <summary>
+        /// Run the startup update check. Called by MainWindow only when both
+        /// Updates:CheckForUpdatesOnStartup and the user's "Check for updates" setting allow it.
+        /// </summary>
+        public void RunStartupUpdateCheck() => CheckForUpdatesAsync();
 
         private async void CheckForUpdatesAsync()
         {

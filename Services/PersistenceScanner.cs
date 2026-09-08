@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using System.Linq;
 using Microsoft.Win32;
 using SkidrowKiller.Models;
@@ -102,7 +103,8 @@ namespace SkidrowKiller.Services
                     if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) continue;
                     foreach (var file in Directory.GetFiles(folder))
                     {
-                        var threat = _analyzer.AnalyzePath(file);
+                        // Startup folders are a prime persistence spot, so inspect content too.
+                        var threat = AnalyzeTarget(file);
                         if (threat != null)
                         {
                             Decorate(threat, file, Path.GetFileName(file), "Startup folder autostart", file);
@@ -199,7 +201,16 @@ namespace SkidrowKiller.Services
         private ThreatInfo? AnalyzeTarget(string? exePath)
         {
             if (string.IsNullOrWhiteSpace(exePath)) return null;
-            try { return _analyzer.AnalyzePath(exePath); } catch { return null; }
+            // Autorun targets are few, so they get the full stack (hash, YARA, PE) rather than a
+            // filename check - persistence entries are exactly where a renamed payload hides.
+            // Task.Run pins this to the thread pool so blocking here can never deadlock against a
+            // captured UI SynchronizationContext, whatever thread the caller happens to be on.
+            try
+            {
+                return Task.Run(() => _analyzer.AnalyzeFileAsync(exePath, DetectionDepth.Full))
+                           .GetAwaiter().GetResult();
+            }
+            catch { return null; }
         }
 
         private static void Decorate(ThreatInfo threat, string regPath, string name, string how, string command)

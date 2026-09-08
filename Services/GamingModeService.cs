@@ -58,6 +58,15 @@ namespace SkidrowKiller.Services
         public event EventHandler<string>? LogAdded;
 
         public bool IsGamingMode => _isGamingMode;
+
+        /// <summary>True while the auto-detect monitor loop is running.</summary>
+        public bool IsRunning => _cts != null;
+
+        /// <summary>
+        /// True when pop-ups and status messages should be held back because a game is running.
+        /// The SuppressNotifications option had no reader before this.
+        /// </summary>
+        public bool NotificationsSuppressed => _isGamingMode && SuppressNotifications;
         public bool AutoDetectEnabled
         {
             get => _autoDetectEnabled;
@@ -197,6 +206,12 @@ namespace SkidrowKiller.Services
                 _protection.Stop();
                 RaiseLog($"Protection paused for gaming: {_currentGame}");
             }
+            else if (ReduceScanIntensity)
+            {
+                // "Reduce scan intensity" used to be a checkbox that changed nothing at all.
+                _protection.LowIntensityMode = true;
+                RaiseLog("Protection throttled to low-intensity mode for gaming");
+            }
 
             RaiseLog($"🎮 Gaming Mode ACTIVATED - {_currentGame}");
             GamingModeChanged?.Invoke(this, new GamingModeEventArgs(true, _currentGame));
@@ -214,6 +229,12 @@ namespace SkidrowKiller.Services
             {
                 _protection.Start();
                 RaiseLog("Protection resumed after gaming");
+            }
+
+            if (_protection.LowIntensityMode)
+            {
+                _protection.LowIntensityMode = false;
+                RaiseLog("Protection returned to full intensity");
             }
 
             RaiseLog($"🎮 Gaming Mode DEACTIVATED - Duration: {duration:hh\\:mm\\:ss} - Reason: {reason}");

@@ -72,6 +72,26 @@ namespace SkidrowKiller.Services
         public bool IsEnabled => _isEnabled;
         public IReadOnlySet<string> ProtectedFolders => _protectedFolders;
 
+        /// <summary>
+        /// Plant hidden decoy files in the protected folders (Settings -> Ransomware -> Honeypot files).
+        /// Turning this off while protection is running removes the decoys we planted.
+        /// </summary>
+        public bool HoneypotFilesEnabled
+        {
+            get => _honeypotFilesEnabled;
+            set
+            {
+                if (_honeypotFilesEnabled == value) return;
+                _honeypotFilesEnabled = value;
+
+                if (!_isEnabled) return;
+                if (value) CreateHoneypotFiles();
+                else RemoveHoneypotFiles();
+            }
+        }
+
+        private bool _honeypotFilesEnabled = true;
+
         public RansomwareProtectionService(SettingsDatabase? db = null)
         {
             _db = db;
@@ -100,7 +120,8 @@ namespace SkidrowKiller.Services
             }
 
             // Create honeypot files
-            CreateHoneypotFiles();
+            if (_honeypotFilesEnabled)
+                CreateHoneypotFiles();
 
             // Setup watchers for protected folders
             SetupWatchers();
@@ -110,6 +131,7 @@ namespace SkidrowKiller.Services
 
             RaiseLog("🛡️ Ransomware protection started");
             RaiseLog($"   Protecting {_protectedFolders.Count} folders");
+            RaiseLog($"   Honeypot decoys: {(_honeypotFilesEnabled ? "Enabled" : "Disabled in settings")}");
 
             StatusChanged?.Invoke(this, true);
         }
@@ -414,6 +436,15 @@ namespace SkidrowKiller.Services
 
         #region Honeypot Files
 
+        private const string HoneypotDecoyName = ".~important_backup.docx";
+
+        private static readonly string[] HoneypotVaultNames =
+        {
+            "important_document.docx",
+            "financial_records.xlsx",
+            "passwords.txt"
+        };
+
         private void CreateHoneypotFiles()
         {
             try
@@ -431,9 +462,8 @@ namespace SkidrowKiller.Services
                 }
 
                 // Also create in honeypot folder
-                CreateHoneypotFile(Path.Combine(_honeypotFolder, "important_document.docx"));
-                CreateHoneypotFile(Path.Combine(_honeypotFolder, "financial_records.xlsx"));
-                CreateHoneypotFile(Path.Combine(_honeypotFolder, "passwords.txt"));
+                foreach (var name in HoneypotVaultNames)
+                    CreateHoneypotFile(Path.Combine(_honeypotFolder, name));
 
                 // Setup honeypot watcher
                 SetupWatcherForFolder(_honeypotFolder);
@@ -444,13 +474,45 @@ namespace SkidrowKiller.Services
             }
         }
 
+        /// <summary>
+        /// Delete the decoys we planted. Only touches our own well-known honeypot names so a real
+        /// user document can never be removed by this.
+        /// </summary>
+        private void RemoveHoneypotFiles()
+        {
+            try
+            {
+                foreach (var folder in _protectedFolders)
+                    DeleteHoneypotFile(Path.Combine(folder, HoneypotDecoyName));
+
+                foreach (var name in HoneypotVaultNames)
+                    DeleteHoneypotFile(Path.Combine(_honeypotFolder, name));
+
+                RaiseLog("Honeypot decoy files removed");
+            }
+            catch (Exception ex)
+            {
+                RaiseLog($"Honeypot removal error: {ex.Message}");
+            }
+        }
+
+        private static void DeleteHoneypotFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return;
+                File.SetAttributes(path, FileAttributes.Normal);
+                File.Delete(path);
+            }
+            catch { /* locked or already gone */ }
+        }
+
         private void CreateHoneypotInFolder(string folder)
         {
             try
             {
                 // Create a hidden honeypot file
-                var honeypotPath = Path.Combine(folder, ".~important_backup.docx");
-                CreateHoneypotFile(honeypotPath);
+                CreateHoneypotFile(Path.Combine(folder, HoneypotDecoyName));
             }
             catch { }
         }

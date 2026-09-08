@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using System.Linq;
 using System.Management;
 using System.Threading;
@@ -263,7 +264,13 @@ namespace SkidrowKiller.Services
         // ---- helpers ----
         private ThreatInfo? SafeAnalyze(string path)
         {
-            try { return _analyzer.AnalyzePath(path); } catch { return null; }
+            // Service/scheduled-task binaries: content analysis, not just the filename.
+            try
+            {
+                return Task.Run(() => _analyzer.AnalyzeFileAsync(path, DetectionDepth.Full))
+                           .GetAwaiter().GetResult();
+            }
+            catch { return null; }
         }
 
         private static ThreatInfo MakeProcThreat(int pid, string name, string exe, string cmd, string reason, int score, ThreatCategory cat)

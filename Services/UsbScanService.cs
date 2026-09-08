@@ -194,10 +194,11 @@ namespace SkidrowKiller.Services
 
                 DeviceConnected?.Invoke(this, new UsbDeviceEventArgs(device));
 
-                // Check for autorun immediately
+                // Check for autorun immediately (fire-and-forget: device registration must not block
+                // on file analysis, and any failure is already logged inside the check).
                 if (_blockAutorun)
                 {
-                    CheckAndBlockAutorun(driveLetter);
+                    _ = CheckAndBlockAutorunAsync(driveLetter);
                 }
             }
             catch { }
@@ -214,7 +215,7 @@ namespace SkidrowKiller.Services
             }
         }
 
-        private void CheckAndBlockAutorun(string driveLetter)
+        private async Task CheckAndBlockAutorunAsync(string driveLetter)
         {
             try
             {
@@ -225,8 +226,8 @@ namespace SkidrowKiller.Services
                     {
                         RaiseLog($"⚠️ Autorun file detected: {path}");
 
-                        // Analyze the autorun file
-                        var threat = _analyzer.AnalyzePath(path);
+                        // Analyze the autorun file (content, not just its name)
+                        var threat = await _analyzer.AnalyzeFileAsync(path, DetectionDepth.Full);
                         if (threat != null)
                         {
                             ThreatFound?.Invoke(this, new UsbThreatEventArgs(driveLetter, threat));
@@ -314,7 +315,9 @@ namespace SkidrowKiller.Services
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
-                    var threat = _analyzer.AnalyzePath(file);
+                    // USB is a primary infection vector, so every file gets content analysis -
+                    // scanning by filename alone could not see real malware on a stick at all.
+                    var threat = await _analyzer.AnalyzeFileAsync(file, DetectionDepth.Full, cancellationToken);
                     if (threat != null)
                     {
                         threats.Add(threat);
@@ -342,7 +345,7 @@ namespace SkidrowKiller.Services
                         {
                             if (cancellationToken.IsCancellationRequested) break;
 
-                            var threat = _analyzer.AnalyzePath(file);
+                            var threat = await _analyzer.AnalyzeFileAsync(file, DetectionDepth.Full, cancellationToken);
                             if (threat != null && !threats.Any(t => t.Path == file))
                             {
                                 threats.Add(threat);

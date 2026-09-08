@@ -155,7 +155,12 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Center"/>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" Foreground="{StaticResource TextPrimaryBrush}"/>
+                                        <TextBlock Text="{Binding Detail}" FontSize="11" TextWrapping="Wrap"
+                                                   Foreground="{StaticResource TextTertiaryBrush}"
+                                                   Visibility="{Binding DetailVisibility}"/>
+                                    </StackPanel>
                                     <Border Grid.Column="1" CornerRadius="3" Padding="8,2" Background="{Binding StatusBrush}">
                                         <TextBlock Text="{Binding StatusText}" FontSize="11" FontWeight="Bold" Foreground="White"/>
                                     </Border>

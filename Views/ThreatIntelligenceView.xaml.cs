@@ -13,16 +13,23 @@ namespace SkidrowKiller.Views
     {
         private readonly ThreatIntelligenceService _threatIntel;
         private readonly LicenseService? _licenseService;
+        private readonly ThreatAnalyzer? _analyzer;
+        private readonly SettingsDatabase? _settingsDb;
+
+        private const string VirusTotalKeySetting = "VirusTotalApiKey";
         private CancellationTokenSource? _cts;
         private LicenseTier _currentTier = LicenseTier.Free;
         private bool _isTrial = false;
 
-        public ThreatIntelligenceView(ThreatIntelligenceService threatIntel, LicenseService? licenseService = null)
+        public ThreatIntelligenceView(ThreatIntelligenceService threatIntel, LicenseService? licenseService = null,
+            ThreatAnalyzer? analyzer = null, SettingsDatabase? settingsDb = null)
         {
             InitializeComponent();
 
             _threatIntel = threatIntel;
             _licenseService = licenseService;
+            _analyzer = analyzer;
+            _settingsDb = settingsDb;
 
             // Subscribe to events
             _threatIntel.ProgressChanged += ThreatIntel_ProgressChanged;
@@ -37,6 +44,36 @@ namespace SkidrowKiller.Views
             // Populate the saved feed-source configuration (once, so we don't clobber typing on refresh).
             TxtAuthKey.Text = _threatIntel.AbuseChAuthKey;
             TxtOfficialUrl.Text = _threatIntel.OfficialFeedUrl;
+            TxtVirusTotalKey.Text = _settingsDb?.GetSetting<string>(VirusTotalKeySetting, string.Empty) ?? string.Empty;
+
+            RefreshDetectionLayers();
+        }
+
+        /// <summary>
+        /// Repaint the detection-layer chips from the engine's actual state. The panel used to be
+        /// eight hardcoded green chips and a fixed "8 ACTIVE LAYERS" badge, so it claimed cloud
+        /// lookup and rule coverage the app did not necessarily have.
+        /// </summary>
+        private void RefreshDetectionLayers()
+        {
+            if (_analyzer == null)
+            {
+                DetectionLayersList.ItemsSource = null;
+                TxtActiveLayers.Text = "ENGINE NOT ATTACHED";
+                LayerCountBadge.Background = (Brush)FindResource("TextTertiaryBrush");
+                return;
+            }
+
+            var layers = _analyzer.GetDetectionLayers()
+                .Select(l => new DetectionLayerViewModel(l, this))
+                .ToList();
+
+            DetectionLayersList.ItemsSource = layers;
+
+            var active = layers.Count(l => l.IsActive);
+            TxtActiveLayers.Text = $"{active}/{layers.Count} ACTIVE LAYERS";
+            LayerCountBadge.Background = (Brush)FindResource(
+                active == layers.Count ? "GreenPrimaryBrush" : "WarningBrush");
         }
 
         private void DetermineCurrentTier()
@@ -203,11 +240,20 @@ namespace SkidrowKiller.Views
         private void BtnSaveFeedConfig_Click(object sender, RoutedEventArgs e)
         {
             _threatIntel.SaveConfiguration(TxtAuthKey.Text?.Trim(), TxtOfficialUrl.Text?.Trim());
+
+            // Persist the VirusTotal key and push it into the live engine so the cloud layer
+            // actually turns on (or back off when the field is cleared).
+            var vtKey = TxtVirusTotalKey.Text?.Trim() ?? string.Empty;
+            _settingsDb?.SetSetting(VirusTotalKeySetting, vtKey, "threatintel");
+            _analyzer?.ConfigureVirusTotal(vtKey);
+
             RefreshUI();
+            RefreshDetectionLayers();
 
             var usable = _threatIntel.CountUsableFeeds(_currentTier);
+            var cloud = _analyzer?.IsVirusTotalActive == true ? "on" : "off";
             MessageBox.Show(
-                $"Feed sources saved. {usable} feed(s) now active.\n\nClick \"Update All\" to fetch from them.",
+                $"Feed sources saved. {usable} feed(s) now active. Cloud lookup: {cloud}.\n\nClick \"Update All\" to fetch from them.",
                 "Configuration Saved", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -228,7 +274,10 @@ namespace SkidrowKiller.Views
         private void BtnUpgrade_Click(object sender, RoutedEventArgs e)
         {
             // Open purchase URL
-            var url = _licenseService?.GetPurchaseUrl() ?? "https://xman4289.com/products/skidrow-killer";
+            // Fall back to the SAME configured purchase URL the rest of the app uses; this used to
+            // point at a different domain entirely.
+            var url = _licenseService?.GetPurchaseUrl()
+                      ?? AppConfiguration.Settings.License.PurchaseUrl;
             try
             {
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
@@ -243,6 +292,26 @@ namespace SkidrowKiller.Views
                     MessageBoxButton.OK, MessageBoxImage.Information);
             }
         }
+    }
+
+    /// <summary>Chip row for the Detection Engine panel.</summary>
+    public class DetectionLayerViewModel
+    {
+        private readonly ThreatAnalyzer.DetectionLayerStatus _status;
+        private readonly FrameworkElement _resourceHost;
+
+        public DetectionLayerViewModel(ThreatAnalyzer.DetectionLayerStatus status, FrameworkElement resourceHost)
+        {
+            _status = status;
+            _resourceHost = resourceHost;
+        }
+
+        public string Name => _status.Name;
+        public string Detail => _status.Detail;
+        public bool IsActive => _status.IsActive;
+
+        public Brush StatusColor => (Brush)_resourceHost.FindResource(
+            _status.IsActive ? "SuccessBrush" : "TextTertiaryBrush");
     }
 
     public class FeedViewModel

@@ -167,7 +167,9 @@ namespace SkidrowKiller.Views
                         WarezBlockedLabel.Text = _warezBlocked.ToString();
                         CrackBlockedLabel.Text = _crackBlocked.ToString();
                         TorrentBlockedLabel.Text = _torrentBlocked.ToString();
-                        HostsBlockedLabel.Text = _networkProtection.DomainsInDatabase.ToString();
+                        // This counter is about the hosts file, so show what is actually written
+                        // there - not the size of the in-memory domain list.
+                        HostsBlockedLabel.Text = _networkProtection.DomainsBlockedInHosts.ToString();
 
                         if (_networkProtection.IsRunning)
                         {
