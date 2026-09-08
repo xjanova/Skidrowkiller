@@ -86,7 +86,6 @@ namespace SkidrowKiller
                 _whitelistManager = new WhitelistManager(_settingsDb, _reputation);
                 _backupManager = new BackupManager(_settingsDb);
                 _analyzer = new ThreatAnalyzer(_whitelistManager) { Reputation = _reputation };
-                _selfTest = new SelfTestService(_analyzer);
 
                 // A saved VirusTotal key has to reach the engine at startup - otherwise the cloud
                 // layer only came alive after the user happened to open the Threat Intel screen.
@@ -106,6 +105,10 @@ namespace SkidrowKiller
                 _scheduledScan = new ScheduledScanService(_scanner, _settingsDb);
                 _browserProtection = new BrowserProtectionService();
                 _threatIntel = new ThreatIntelligenceService(_settingsDb);
+
+                // Give the self-test the real services so it can prove scan / remove / quarantine /
+                // library end-to-end, not just the pattern matcher.
+                _selfTest = new SelfTestService(_analyzer, _quarantine, _whitelistManager, _backupManager, _threatIntel);
 
                 // Signature (signatures.json) auto-updater — reloads the live DB after a verified download.
                 _signatureUpdate = new SignatureUpdateService();

@@ -396,15 +396,13 @@ public class ThreatIntelligenceService : IDisposable
             }
         };
 
-        // abuse.ch downloads now require a free Auth-Key — mark those feeds so they are skipped
-        // (not failed) when no key is configured, instead of spamming 401 errors.
+        // abuse.ch MAY require a free Auth-Key. We no longer assume it does: these feeds used to be
+        // hard-marked RequiresAuthKey and skipped outright, which switched off the app's only real
+        // malware-HASH sources by default (the remaining keyless feeds are IP blocklists and
+        // contribute nothing to file scanning). They are attempted keyless and only marked as
+        // needing a key after the server actually answers 401/403 - see DownloadToFileAsync.
         foreach (var f in feeds)
         {
-            if (f.Url.Contains("bazaar.abuse.ch") || f.Url.Contains("threatfox.abuse.ch") ||
-                f.Url.Contains("urlhaus.abuse.ch"))
-            {
-                f.RequiresAuthKey = true;
-            }
             // abuse.ch sources are well-curated.
             if (f.Url.Contains("abuse.ch")) f.Trust = FeedTrust.Curated;
         }
@@ -634,10 +632,28 @@ public class ThreatIntelligenceService : IDisposable
     private async Task DownloadToFileAsync(string url, string destPath, ThreatFeed feed, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        if (feed.RequiresAuthKey && !string.IsNullOrEmpty(_abuseChAuthKey))
+
+        // Always present the key when we have one; abuse.ch ignores it where it is not needed.
+        if (!string.IsNullOrEmpty(_abuseChAuthKey) && url.Contains("abuse.ch"))
             req.Headers.TryAddWithoutValidation("Auth-Key", _abuseChAuthKey);
 
         using var response = await _httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+
+        // Learn (rather than assume) that a feed is key-gated, so the UI can say so accurately.
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized ||
+            response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+        {
+            if (string.IsNullOrEmpty(_abuseChAuthKey))
+            {
+                feed.RequiresAuthKey = true;
+                _logger?.LogInformation("{Feed} now requires an Auth-Key ({Status})", feed.Name, response.StatusCode);
+            }
+        }
+        else if (response.IsSuccessStatusCode)
+        {
+            feed.RequiresAuthKey = false;
+        }
+
         response.EnsureSuccessStatusCode();
 
         // Write to a temp file then atomically move, so an interrupted download never corrupts the cache.
@@ -706,6 +722,26 @@ public class ThreatIntelligenceService : IDisposable
 
     #region Feed Parsers
 
+    /// <summary>
+    /// Pull every MD5/SHA-1/SHA-256 looking token out of one line, whatever wraps it.
+    /// Boundaries are enforced so a longer hex blob is not chopped into fake hashes.
+    /// </summary>
+    private static IEnumerable<string> ExtractHashTokens(string line)
+    {
+        var i = 0;
+        while (i < line.Length)
+        {
+            if (!IsHexAnyCase(line[i])) { i++; continue; }
+
+            var start = i;
+            while (i < line.Length && IsHexAnyCase(line[i])) i++;
+
+            var len = i - start;
+            if (len == 32 || len == 40 || len == 64)
+                yield return line.Substring(start, len).ToLowerInvariant();
+        }
+    }
+
     private async Task<FeedUpdateResult> ParseMalwareBazaarHashes(string path, ThreatFeed feed)
     {
         var result = new FeedUpdateResult();
@@ -718,13 +754,13 @@ public class ThreatIntelligenceService : IDisposable
             if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
                 continue;
 
-            var hash = line.Trim().ToLowerInvariant();
-            if (hash.Length == 32 || hash.Length == 64) // MD5 or SHA256
+            // Extract hex tokens from anywhere on the line. A whole-line match alone silently
+            // produced ZERO hashes from feeds that wrap them in JSON or CSV (DigitalSide's
+            // latesthashes.txt is JSON and carries >1000 SHA-256 values per refresh).
+            foreach (var hash in ExtractHashTokens(line))
             {
                 if (!existingHashes.Contains(hash))
-                {
                     newHashes.Add(hash);
-                }
             }
         }
 
@@ -1159,6 +1195,11 @@ public class ThreatIntelligenceService : IDisposable
                         db.AddHash(hash, HashType.MD5, "Intel.Malware", sourceName, 9);
                         imported++; count++;
                     }
+                    else if (hash.Length == 40)
+                    {
+                        db.AddHash(hash, HashType.SHA1, "Intel.Malware", sourceName, 9);
+                        imported++; count++;
+                    }
                     else if (hash.Length == 64)
                     {
                         db.AddHash(hash, HashType.SHA256, "Intel.Malware", sourceName, 9);
@@ -1224,6 +1265,10 @@ public class ThreatIntelligenceService : IDisposable
     }
 
     private static bool IsHexChar(char c) => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+
+    /// <summary>Hex test that also accepts upper case - feeds are not consistent about it.</summary>
+    private static bool IsHexAnyCase(char c) =>
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
     private async Task<FeedUpdateResult> ParseImphashList(string path, ThreatFeed feed)
     {

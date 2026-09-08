@@ -480,7 +480,7 @@ namespace SkidrowKiller.Services
                     if (Directory.Exists(folder))
                     {
                         RaiseLog($"   📁 {folder}");
-                        await Task.Run(() => ScanDirectory(folder, result, token), token);
+                        await Task.Run(() => ScanDirectoryAsync(folder, result, token), token);
                     }
                     else
                     {
@@ -505,7 +505,7 @@ namespace SkidrowKiller.Services
                         if (Directory.Exists(path))
                         {
                             RaiseLog($"   📁 {path}");
-                            await Task.Run(() => ScanDirectory(path, result, token, maxDepth: 3), token);
+                            await Task.Run(() => ScanDirectoryAsync(path, result, token, maxDepth: 3), token);
                         }
                     }
                 }
@@ -517,12 +517,25 @@ namespace SkidrowKiller.Services
                 {
                     if (token.IsCancellationRequested) break;
                     RaiseLog($"   📁 Scanning drive: {drive}");
-                    await Task.Run(() => ScanDirectory(drive, result, token), token);
+                    await Task.Run(() => ScanDirectoryAsync(drive, result, token), token);
                 }
             }
         }
 
-        private void ScanDirectory(string path, ScanResult result, CancellationToken token, int maxDepth = -1, int currentDepth = 0)
+        /// <summary>
+        /// Extensions that earn the full detection stack (PE/imphash, heuristics, behavioural APIs,
+        /// entropy, cloud). Everything else still gets hash + content signatures + YARA + ADS.
+        /// </summary>
+        private static readonly HashSet<string> DeepInspectExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".dll", ".sys", ".scr", ".ocx", ".cpl", ".drv", ".efi",
+            ".com", ".pif", ".msi", ".msp", ".jar",
+            ".bat", ".cmd", ".ps1", ".psm1", ".vbs", ".vbe", ".js", ".jse",
+            ".wsf", ".wsh", ".hta", ".lnk", ".reg"
+        };
+
+        private async Task ScanDirectoryAsync(string path, ScanResult result, CancellationToken token,
+            int maxDepth = -1, int currentDepth = 0)
         {
             try
             {
@@ -530,7 +543,7 @@ namespace SkidrowKiller.Services
                 if (token.IsCancellationRequested) return;
                 if (maxDepth != -1 && currentDepth > maxDepth) return;
 
-                // Analyze directory itself
+                // Analyze directory itself (name/path only - a directory has no content to hash)
                 var dirThreat = _analyzer.AnalyzePath(path);
                 if (dirThreat != null)
                 {
@@ -555,7 +568,26 @@ namespace SkidrowKiller.Services
                     // Scanning:ProgressUpdateIntervalMs entirely.
                     RaiseProgressThrottled(file, result);
 
-                    var threat = _analyzer.AnalyzePath(file);
+                    // Content-based analysis. This used to be _analyzer.AnalyzePath(file), which looks
+                    // only at the file NAME and path - so the downloaded hash database, the YARA rules
+                    // and every PE/entropy/behavioural layer were never consulted by a scan, and any
+                    // real malware sitting under an innocuous filename went completely undetected.
+                    var depth = DeepInspectExtensions.Contains(Path.GetExtension(file))
+                        ? DetectionDepth.Full
+                        : DetectionDepth.Signature;
+
+                    ThreatInfo? threat;
+                    try
+                    {
+                        threat = await _analyzer.AnalyzeFileAsync(file, depth, token);
+                    }
+                    catch (OperationCanceledException) { return; }
+                    catch (Exception ex)
+                    {
+                        _logger.Debug(ex, "Analysis failed for {Path}", file);
+                        continue;
+                    }
+
                     if (threat != null)
                     {
                         result.Threats.Add(threat);
@@ -570,10 +602,11 @@ namespace SkidrowKiller.Services
                 foreach (var dir in Directory.GetDirectories(path))
                 {
                     if (token.IsCancellationRequested) return;
-                    ScanDirectory(dir, result, token, maxDepth, currentDepth + 1);
+                    await ScanDirectoryAsync(dir, result, token, maxDepth, currentDepth + 1);
                 }
             }
             catch (UnauthorizedAccessException) { }
+            catch (OperationCanceledException) { }
             catch (Exception) { }
         }
 
@@ -758,6 +791,30 @@ namespace SkidrowKiller.Services
                         if (loadedDlls?.Any() == true)
                         {
                             RaiseLog($"   Suspicious DLLs: {string.Join(", ", loadedDlls.Select(Path.GetFileName))}");
+                        }
+                    }
+                    else if (!string.IsNullOrEmpty(execPath))
+                    {
+                        // AnalyzeProcess only matches on the process NAME and path. Also inspect the
+                        // backing executable's CONTENT, otherwise known malware running as, say,
+                        // "updater.exe" was invisible to a process scan.
+                        ThreatInfo? fileThreat = null;
+                        try { fileThreat = await _analyzer.AnalyzeFileAsync(execPath, DetectionDepth.Full, token); }
+                        catch (OperationCanceledException) { break; }
+                        catch (Exception ex) { _logger.Debug(ex, "Process image analysis failed for {Path}", execPath); }
+
+                        if (fileThreat != null)
+                        {
+                            fileThreat.Type = ThreatType.Process;
+                            fileThreat.ProcessId = process.Id;
+                            fileThreat.Name = process.ProcessName;
+
+                            result.Threats.Add(fileThreat);
+                            result.ThreatsFound++;
+                            ThreatFound?.Invoke(this, fileThreat);
+                            RaiseLog($"🔴 [PROCESS] {fileThreat.SeverityDisplay}: {process.ProcessName} (PID: {process.Id})");
+                            RaiseLog($"   Image: {execPath}");
+                            RaiseLog($"   Score: {fileThreat.Score} | Patterns: {string.Join(", ", fileThreat.MatchedPatterns)}");
                         }
                     }
                 }

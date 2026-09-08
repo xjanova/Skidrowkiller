@@ -283,7 +283,10 @@ namespace SkidrowKiller.Services
                 // Wait for file to be fully written
                 await Task.Delay(500);
 
-                var threat = _analyzer.AnalyzePath(filePath);
+                // Content analysis, not just the filename. Real-time protection used to call
+                // AnalyzePath, which never consults the hash database, the YARA rules or the PE
+                // layers - so a dropper landing in Downloads under a harmless name was ignored.
+                var threat = await _analyzer.AnalyzeFileAsync(filePath, DetectionDepth.Full);
                 if (threat != null && threat.Severity >= ThreatSeverity.Medium)
                 {
                     _alertCount++;

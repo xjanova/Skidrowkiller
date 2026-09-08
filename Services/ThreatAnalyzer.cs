@@ -14,6 +14,16 @@ namespace SkidrowKiller.Services
     /// - Entropy-based packing detection
     /// - VirusTotal cloud lookup
     /// </summary>
+    /// <summary>How much of the detection stack to run over a single file.</summary>
+    public enum DetectionDepth
+    {
+        /// <summary>Name/path + ADS + hash + content signatures + YARA. Cheap enough for every file.</summary>
+        Signature,
+
+        /// <summary>Everything, including PE/imphash, heuristics, behaviour, entropy and cloud lookup.</summary>
+        Full
+    }
+
     public class ThreatAnalyzer
     {
         private readonly WhitelistManager _whitelistManager;
@@ -173,6 +183,29 @@ namespace SkidrowKiller.Services
 
         /// <summary>One row of <see cref="GetDetectionLayers"/>.</summary>
         public sealed record DetectionLayerStatus(string Name, bool IsActive, string Detail);
+
+        /// <summary>Largest file the content-based layers will open, from Scanning:MaxFileSizeMB.</summary>
+        private static readonly long MaxAnalyzedFileBytes = ResolveMaxAnalyzedFileBytes();
+
+        /// <summary>
+        /// Largest file we pull fully into memory for YARA / content-signature / fuzzy matching.
+        /// Above this only the streamed hash runs - those layers are substring searches that pay off
+        /// on small files, and buffering a 100 MB video per file would wreck a full-drive scan.
+        /// </summary>
+        private static readonly long ContentBufferCapBytes =
+            Math.Min(32L * 1024 * 1024, ResolveMaxAnalyzedFileBytes());
+
+        private static long ResolveMaxAnalyzedFileBytes()
+        {
+            try
+            {
+                var mb = AppConfiguration.Settings.Scanning.MaxFileSizeMB;
+                if (mb > 0) return (long)mb * 1024 * 1024;
+            }
+            catch { /* configuration unavailable */ }
+
+            return 100L * 1024 * 1024;
+        }
 
         /// <summary>
         /// Optional local learning layer. When set, final scores are adjusted by what the app has
@@ -538,7 +571,25 @@ namespace SkidrowKiller.Services
         /// <summary>
         /// Deep analysis of a file including PE analysis, heuristics, and YARA rules
         /// </summary>
-        public async Task<ThreatInfo?> AnalyzePathDeepAsync(string path)
+        public Task<ThreatInfo?> AnalyzePathDeepAsync(string path)
+            => AnalyzeFileAsync(path, DetectionDepth.Full);
+
+        /// <summary>
+        /// Analyse one file through the content-based detection layers.
+        ///
+        /// This is the method every file scan must go through. Until it was wired into SafeScanner the
+        /// scanner only ever called <see cref="AnalyzePath(string)"/>, which matches on file NAME and
+        /// path alone - so the downloaded hash database, the YARA rules and the PE/entropy/behavioural
+        /// layers were never consulted by a scan, and malware with an innocuous filename was invisible.
+        ///
+        /// <paramref name="depth"/> controls cost:
+        ///   Signature - name/path + ADS/MOTW + SHA-256 hash lookup + content signatures + YARA + fuzzy.
+        ///               Cheap enough to run on every file on a drive.
+        ///   Full      - the above plus PE/imphash, heuristics, behavioural APIs, entropy and the cloud
+        ///               lookup. Reserved for executables and scripts, which is where they pay off.
+        /// </summary>
+        public async Task<ThreatInfo?> AnalyzeFileAsync(string path, DetectionDepth depth = DetectionDepth.Full,
+            CancellationToken cancellationToken = default)
         {
             // Start with basic analysis (reputation applied once below, after the hash is known)
             var threat = AnalyzePath(path, applyReputation: false);
@@ -548,6 +599,30 @@ namespace SkidrowKiller.Services
             // If it's a file, perform deeper analysis
             if (!File.Exists(path)) return threat;
 
+            // Skip the content-reading layers on files above the configured cap: a single huge file
+            // must not stall a whole scan. The name/path verdict above still stands.
+            long fileSize;
+            try
+            {
+                fileSize = new FileInfo(path).Length;
+                if (fileSize == 0 || fileSize > MaxAnalyzedFileBytes) return ApplyFinalVerdict(threat);
+            }
+            catch { return ApplyFinalVerdict(threat); }
+
+            if (cancellationToken.IsCancellationRequested) return ApplyFinalVerdict(threat);
+
+            // ONE read for all the buffer-based layers. Hashing, YARA and the content signatures used
+            // to open and stream the same file three separate times, which made a full-drive scan
+            // pay triple I/O for every single file.
+            byte[]? content = null;
+            if (fileSize <= ContentBufferCapBytes)
+            {
+                try { content = await File.ReadAllBytesAsync(path, cancellationToken); }
+                catch (OperationCanceledException) { return ApplyFinalVerdict(threat); }
+                catch { content = null; }
+            }
+
+            var full = depth == DetectionDepth.Full;
             var extension = Path.GetExtension(path).ToLower();
             var isExecutable = extension == ".exe" || extension == ".dll" || extension == ".scr" || extension == ".sys";
 
@@ -582,7 +657,9 @@ namespace SkidrowKiller.Services
                 catch { }
 
                 // 1. Hash-based detection
-                var sha256 = await _signatureDb.ComputeSHA256Async(path);
+                var sha256 = content != null
+                    ? MalwareSignatureDatabase.ComputeSHA256(content)
+                    : await _signatureDb.ComputeSHA256Async(path);
                 if (!string.IsNullOrEmpty(sha256))
                 {
                     threat.Hash = sha256; // stable key for reputation/learning
@@ -600,11 +677,9 @@ namespace SkidrowKiller.Services
                 {
                     try
                     {
-                        var fi = new FileInfo(path);
-                        if (fi.Length > 0 && fi.Length <= 20 * 1024 * 1024) // 20MB cap for perf
+                        if (content != null && content.Length <= 20 * 1024 * 1024) // 20MB cap for perf
                         {
-                            var bytes = await File.ReadAllBytesAsync(path);
-                            threat.FuzzyHash = FuzzyHash.Compute(bytes);
+                            threat.FuzzyHash = FuzzyHash.Compute(content);
 
                             var best = 0;
                             var bestName = "";
@@ -627,7 +702,7 @@ namespace SkidrowKiller.Services
                 }
 
                 // 2. PE Analysis for executables
-                if (isExecutable && EnablePEAnalysis)
+                if (full && isExecutable && EnablePEAnalysis)
                 {
                     var peResult = await _peAnalyzer.AnalyzeAsync(path);
                     if (peResult.IsValid)
@@ -664,7 +739,9 @@ namespace SkidrowKiller.Services
                 }
 
                 // 3. YARA rule scanning
-                var yaraMatches = await _signatureDb.ScanWithYaraAsync(path);
+                var yaraMatches = content != null
+                    ? _signatureDb.ScanWithYara(content)
+                    : new List<YaraMatch>();
                 foreach (var match in yaraMatches)
                 {
                     threat.Score += match.Rule.ThreatLevel * 5;
@@ -672,7 +749,9 @@ namespace SkidrowKiller.Services
                 }
 
                 // 4. Content signature analysis
-                var contentMatch = await _signatureDb.CheckFileContentAsync(path);
+                var contentMatch = content != null
+                    ? _signatureDb.CheckFileContent(content, path)
+                    : null;
                 if (contentMatch != null && contentMatch.MatchScore > 0)
                 {
                     threat.Score += contentMatch.MatchScore / 2;
@@ -683,7 +762,7 @@ namespace SkidrowKiller.Services
                 }
 
                 // 5. Heuristic analysis
-                if (EnableHeuristicAnalysis)
+                if (full && EnableHeuristicAnalysis)
                 {
                     var heuristicResult = await _heuristicEngine.AnalyzeFileAsync(path);
                     if (heuristicResult.Score > 20)
@@ -715,7 +794,7 @@ namespace SkidrowKiller.Services
                 }
 
                 // 6. Behavioral API analysis
-                if (EnableBehavioralAnalysis && _behavioralAnalyzer != null && isExecutable)
+                if (full && EnableBehavioralAnalysis && _behavioralAnalyzer != null && isExecutable)
                 {
                     try
                     {
@@ -747,7 +826,7 @@ namespace SkidrowKiller.Services
                 }
 
                 // 7. Entropy analysis (packing detection)
-                if (EnableEntropyAnalysis && _entropyAnalyzer != null && isExecutable)
+                if (full && EnableEntropyAnalysis && _entropyAnalyzer != null && isExecutable)
                 {
                     try
                     {
@@ -783,7 +862,7 @@ namespace SkidrowKiller.Services
                 }
 
                 // 8. VirusTotal cloud lookup
-                if (EnableVirusTotalLookup && _virusTotalService != null && _virusTotalService.IsConfigured)
+                if (full && EnableVirusTotalLookup && _virusTotalService != null && _virusTotalService.IsConfigured)
                 {
                     try
                     {
@@ -826,8 +905,20 @@ namespace SkidrowKiller.Services
                 // Continue with what we have
             }
 
-            // Apply learned reputation using the file hash (bounded + auditable). A locally-trusted
-            // hash clears the detection; a known-bad/VT-corroborated hash is boosted, never silenced.
+            return ApplyFinalVerdict(threat);
+        }
+
+        /// <summary>
+        /// Apply learned reputation, clamp the score and decide whether this is reportable.
+        /// Shared by every exit of <see cref="AnalyzeFileAsync"/> so an early return (oversized file,
+        /// cancellation) reaches the same verdict rules as a complete pass.
+        /// </summary>
+        private ThreatInfo? ApplyFinalVerdict(ThreatInfo? threat)
+        {
+            if (threat == null) return null;
+
+            // A locally-trusted hash clears the detection; a known-bad/VT-corroborated hash is
+            // boosted, never silenced.
             if (Reputation != null && threat.MatchedPatterns.Count > 0)
             {
                 var adj = Reputation.AdjustScore(threat.Hash, threat.MatchedPatterns, threat.Score, CriticalScoreThreshold);
@@ -836,7 +927,6 @@ namespace SkidrowKiller.Services
                 threat.MatchedPatterns.AddRange(adj.Notes);
             }
 
-            // Recalculate severity
             threat.Score = Math.Min(threat.Score, 100);
             threat.Severity = DetermineServerity(threat.Score);
 
